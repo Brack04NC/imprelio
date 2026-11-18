@@ -1,0 +1,91 @@
+'use client';
+
+import Link from 'next/link';
+import { Building2, CalendarDays, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, ClipboardList, Warehouse, ChartNoAxesCombined, PanelTop, ArrowUpRight } from 'lucide-react';
+import { useRef, type ReactNode } from 'react';
+import { signOut } from '@/app/login/actions';
+import type { Identity } from '@/lib/domain';
+
+const upcoming = [
+  { name: 'Clienti', icon: Users }, { name: 'Commesse', icon: BriefcaseBusiness },
+  { name: 'Preventivi', icon: ClipboardList }, { name: 'Magazzino', icon: Warehouse },
+  { name: 'Dipendenti e squadre', icon: HardHat }, { name: 'Amministrazione', icon: ChartNoAxesCombined },
+];
+
+export function orgLink(path: string, identity: Identity) {
+  if (identity.orgs.length < 2) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'azienda=' + identity.org.id;
+}
+
+export function Shell({ identity, section, detail, onSearch, onAgenda, children }: {
+  identity: Identity; section: 'cantieri' | 'accessi'; detail?: string;
+  onSearch?: () => void; onAgenda?: () => void; children: ReactNode;
+}) {
+  const mobile = useRef<HTMLDialogElement>(null);
+  const initials = identity.name.split(/[ ._-]+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'IM';
+  const overview = orgLink('/cantieri', identity);
+  const agenda = orgLink('/cantieri?vista=agenda', identity);
+  const access = orgLink('/accessi', identity);
+  function sidebar() {
+    return <>
+      <Link href={overview} className="brand" onClick={() => mobile.current?.close()}>
+        <span className="brand-icon"><Building2 size={23} strokeWidth={2.1}/></span>
+        <span>Imprelio<small>Gestione cantieri</small></span>
+      </Link>
+      <div className="nav-main">
+        <p className="nav-label">OPERATIVITÀ</p>
+        <Link href={overview} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
+        <Link href={agenda} className="nav-link" onClick={event => {
+          mobile.current?.close();
+          if (onAgenda && !event.metaKey && !event.ctrlKey && !event.shiftKey) { event.preventDefault(); onAgenda(); }
+        }}><CalendarDays size={18} /> Agenda</Link>
+        {identity.org.role === 'admin' && <Link href={access} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
+        <p className="nav-label roadmap-label">PROSSIMI MODULI</p>
+        {upcoming.map(({ name, icon: Icon }) => <span key={name} className="nav-link nav-upcoming"><Icon size={18} /> {name}</span>)}
+      </div>
+      <div className="sidebar-footer">
+        <div className="org-icon"><BriefcaseBusiness size={17} /></div>
+        <div><strong>{identity.org.name}</strong><small>{identity.demo ? 'Spazio dimostrativo' : 'Spazio di lavoro'}</small></div>
+      </div>
+    </>;
+  }
+  return <div className="app-shell">
+    <a className="skip" href="#contenuto">Vai al contenuto</a>
+    <aside className="sidebar">{sidebar()}</aside>
+    <dialog ref={mobile} className="mobile-nav" aria-label="Navigazione" onClick={event => {
+      if (event.target === event.currentTarget) event.currentTarget.close();
+    }}>
+      <div className="mobile-nav-content">
+        <button className="icon-button nav-close" onClick={() => mobile.current?.close()} aria-label="Chiudi menu"><X size={20}/></button>
+        {sidebar()}
+      </div>
+    </dialog>
+    <div className="app-body">
+      <header className="topbar">
+        <div className="breadcrumbs">
+          <button className="icon-button menu-trigger" onClick={() => mobile.current?.showModal()} aria-label="Apri menu"><Menu size={21}/></button>
+          <PanelTop size={16} className="breadcrumb-icon" aria-hidden="true"/>
+          <span className="breadcrumb-root">Area di lavoro</span><ChevronRight size={14} className="breadcrumb-root" />
+          {detail ? <Link href={overview}>Cantieri</Link> : <strong>{section === 'cantieri' ? 'Cantieri' : 'Gestione accessi'}</strong>}
+          {detail && <><ChevronRight size={14}/><strong className="breadcrumb-detail">{detail}</strong></>}
+        </div>
+        <div className="top-actions">
+          <Link className="global-search" aria-label="Cerca cantieri" href={orgLink('/cantieri?cerca=1', identity)} onClick={event => {
+            if (onSearch && !event.metaKey && !event.ctrlKey && !event.shiftKey) { event.preventDefault(); onSearch(); }
+          }}><Search size={17}/><span>Cerca cantieri</span><kbd>⌘ K</kbd></Link>
+          <details className="profile">
+            <summary aria-label="Profilo e azienda"><span className="avatar">{initials}</span><span className="profile-name">{identity.name}</span><ChevronDown size={13} className="profile-chevron"/></summary>
+            <div className="profile-menu">
+              <strong>{identity.name}</strong>
+              <small>{identity.demo ? 'Profilo dimostrativo' : identity.email}</small>
+              {identity.orgs.length > 1 && identity.orgs.map(org => <Link key={org.id} href={'/cantieri?azienda=' + org.id}><ArrowUpRight size={16}/> {org.name}</Link>)}
+              {identity.org.role === 'admin' && <Link href={access}><ShieldCheck size={16} /> Gestione accessi</Link>}
+              {!identity.demo && <form action={signOut}><button><LogOut size={16} /> Esci</button></form>}
+            </div>
+          </details>
+        </div>
+      </header>
+      <main id="contenuto" className="content">{children}</main>
+    </div>
+  </div>;
+}

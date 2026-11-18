@@ -1,0 +1,46 @@
+project_id = "imprelio"
+
+[api]
+port = 54321
+
+[db]
+port = 54322
+major_version = 17
+
+[db.seed]
+enabled = false
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/conferma"]
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+
+[auth.email.template.invite]
+subject = "Invito a Imprelio"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.magic_link]
+subject = "Accedi a Imprelio"
+content_path = "./supabase/templates/magic-link.html"
+
+[inbucket]
+enabled = true
+port = 54324
+
+[studio]
+enabled = false
+
+[storage]
+enabled = false
+
+[realtime]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false
