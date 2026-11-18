@@ -6,6 +6,7 @@ import { signIn, signOut } from './actions';
 const messages: Record<string, string> = {
   accesso: 'Il tuo account non ha accesso a un’azienda. Contatta il tuo amministratore.',
   link: 'Il link è scaduto o è già stato usato. Richiedine uno nuovo.',
+  attivazione: 'L’attivazione dell’accesso non è riuscita. Richiedi un nuovo link e riprova.',
   email: 'Inserisci un indirizzo email valido.',
   attendi: 'Attendi un minuto prima di richiedere un altro link.',
   invio: 'Invio non riuscito. Riprova tra poco.',

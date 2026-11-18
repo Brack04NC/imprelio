@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { demoSeed, demoWorkspace, updateDemo } from '../lib/demo.ts';
 import { parseWorkspaceParams, plusDays, romeDate } from '../lib/domain.ts';
+import { documentLineQuantity, documentTotals } from '../lib/operation-documents.ts';
 
 const initialFilter = { q: '', status: 'all', page: 1, siteId: null };
 const sampleDay = '2026-11-18';
@@ -34,6 +35,25 @@ test('Completamento e riprogrammazione agiscono sulle singole zone', () => {
   assert.equal(result.current.jobs.find(job => job.id === north.id).status, 'done');
   assert.equal(result.current.jobs.find(job => job.id === south.id).due_date, '2026-11-21');
   assert.equal(result.current.site.nextJob.id, south.id);
+});
+
+test('Cambiare cliente da una scheda cantiere mantiene distinte le due anagrafiche', () => {
+  const data = demoSeed(sampleDay);
+  const { id, name, city, address, manager, status } = data.sites[0];
+  const change = { action: 'site', id, name, city, address, manager, status, client_id: null };
+  const first = updateDemo(data, { ...change, new_client: 'Primo cliente' });
+  const second = updateDemo(first, { ...change, new_client: 'Secondo cliente' });
+  const ids = second.clients.filter(client => client.name.endsWith('cliente')).map(client => client.id);
+  assert.equal(new Set(ids).size, 2);
+  assert.equal(demoWorkspace(second, { ...initialFilter, siteId: id }, sampleDay).current.site.client, 'Secondo cliente');
+});
+
+test('Computi e documenti calcolano misure, centesimi e IVA', () => {
+  const work = { quantity: '2', length: '4,5', height: '3', unit_price: '10' };
+  assert.equal(documentLineQuantity('estimate', work), 27_000n);
+  assert.equal(documentTotals('estimate', {}, [work]).total, 27_000n);
+  const bill = { quantity: '3', unit_price: '12.50' };
+  assert.deepEqual(documentTotals('invoice', { vat: '22' }, [bill]), { net: 3_750n, vat: 825n, total: 4_575n });
 });
 
 test('PostgreSQL isola aziende e permessi e rende ripetibili gli invii', async t => {

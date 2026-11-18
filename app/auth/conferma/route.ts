@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     const db = await database();
     const { error } = await db.auth.verifyOtp({ token_hash: hash, type: type as EmailOtpType });
     if (!error) {
-      await db.rpc('claim_imprelio_invitations');
+      const { error: activationError } = await db.rpc('claim_imprelio_invitations');
+      if (activationError) return NextResponse.redirect(new URL('/login?errore=attivazione', authRedirect()));
       return NextResponse.redirect(new URL('/cantieri', authRedirect()));
     }
   }

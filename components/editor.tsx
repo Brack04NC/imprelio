@@ -20,13 +20,14 @@ export function Drawer({ title, children, onClose, busy = false }: {
 }
 
 type EditorProps = {
-  editor: { type: 'site'; site?: Site } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
+  editor: { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
   clients: Client[]; today: string; onClose: () => void; save: (action: Action) => Promise<void>;
 };
 export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
   const job = editor.type === 'job' ? editor.job : undefined;
   const site = editor.type === 'site' ? editor.site : undefined;
   const [newClient, setNewClient] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(site?.client_id ?? (editor.type === 'site' ? editor.clientId ?? '' : ''));
   const stableId = useRef<string>(job?.id ?? site?.id ?? '');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
@@ -62,7 +63,7 @@ export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
           <label>Responsabile <input name="manager" maxLength={100} defaultValue={site?.manager} placeholder="Nome e cognome"/></label>
           <div className="client-input">
             {newClient ? <label>Nome del nuovo cliente <input name="new_client" required maxLength={140} placeholder="Nome o ragione sociale" /></label>
-              : <label>Cliente <select name="client_id" defaultValue={site?.client_id ?? ''}><option value="">Seleziona cliente</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
+              : <label>Cliente <select name="client_id" aria-label="Cliente" required value={selectedClient} onChange={event => setSelectedClient(event.target.value)}><option value="">Seleziona cliente</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
             <button type="button" className="button text-button" onClick={() => setNewClient(value => !value)}>{!newClient && <Plus size={16}/>} {newClient ? 'Scegli un cliente esistente' : 'Crea cliente'}</button>
           </div>
         </> : <>

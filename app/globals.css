@@ -183,6 +183,8 @@ kbd { font: inherit; font-size: 11px; border: 1px solid #e0e6f0; background: #ff
 .site-data { margin: 23px 0 0; padding-top: 19px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
 .site-data dt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .site-data dd { margin: 0; font-weight: 560; overflow-wrap: anywhere; }
+.site-client-link { color: var(--brand); }
+.site-client-link:hover { text-decoration: underline; }
 .detail-agenda .panel-header { padding: 18px 21px; }
 .detail-jobs li, .access-list li { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
 .detail-job-main, .access-list li > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }

@@ -1,16 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, CalendarDays, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, ClipboardList, Warehouse, ChartNoAxesCombined, PanelTop, ArrowUpRight } from 'lucide-react';
+import { Building2, CalendarDays, Calculator, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, FileText, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
+import { areas, type OperationArea } from '@/lib/operation-types';
 
-const upcoming = [
-  { name: 'Clienti', icon: Users }, { name: 'Commesse', icon: BriefcaseBusiness },
-  { name: 'Preventivi', icon: ClipboardList }, { name: 'Magazzino', icon: Warehouse },
-  { name: 'Dipendenti e squadre', icon: HardHat }, { name: 'Amministrazione', icon: ChartNoAxesCombined },
-];
+const modules = [
+  { section: 'clienti', label: 'Clienti', href: '/clienti', icon: Building2 },
+  { section: 'magazzino', label: areas.magazzino.title, href: '/gestione/magazzino', icon: Warehouse },
+  { section: 'personale', label: areas.personale.title, href: '/gestione/personale', icon: Users },
+  { section: 'amministrazione', label: areas.amministrazione.title, href: '/gestione/amministrazione', icon: FileText },
+  { section: 'computi-metrici', label: areas['computi-metrici'].title, href: '/gestione/computi-metrici', icon: Calculator },
+] as const;
 
 export function orgLink(path: string, identity: Identity) {
   if (identity.orgs.length < 2) return path;
@@ -18,7 +21,7 @@ export function orgLink(path: string, identity: Identity) {
 }
 
 export function Shell({ identity, section, detail, onSearch, onAgenda, children }: {
-  identity: Identity; section: 'cantieri' | 'accessi'; detail?: string;
+  identity: Identity; section: 'cantieri' | 'accessi' | 'clienti' | OperationArea; detail?: string;
   onSearch?: () => void; onAgenda?: () => void; children: ReactNode;
 }) {
   const mobile = useRef<HTMLDialogElement>(null);
@@ -26,6 +29,7 @@ export function Shell({ identity, section, detail, onSearch, onAgenda, children 
   const overview = orgLink('/cantieri', identity);
   const agenda = orgLink('/cantieri?vista=agenda', identity);
   const access = orgLink('/accessi', identity);
+  const sectionLabel = section === 'cantieri' ? 'Cantieri' : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
   function sidebar() {
     return <>
       <Link href={overview} className="brand" onClick={() => mobile.current?.close()}>
@@ -40,8 +44,10 @@ export function Shell({ identity, section, detail, onSearch, onAgenda, children 
           if (onAgenda && !event.metaKey && !event.ctrlKey && !event.shiftKey) { event.preventDefault(); onAgenda(); }
         }}><CalendarDays size={18} /> Agenda</Link>
         {identity.org.role === 'admin' && <Link href={access} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
-        <p className="nav-label roadmap-label">PROSSIMI MODULI</p>
-        {upcoming.map(({ name, icon: Icon }) => <span key={name} className="nav-link nav-upcoming"><Icon size={18} /> {name}</span>)}
+        <p className="nav-label roadmap-label">GESTIONE</p>
+        {modules.map(({ section: page, label, href, icon: Icon }) => <Link key={page} href={orgLink(href, identity)}
+          onClick={() => mobile.current?.close()} aria-current={section === page ? 'page' : undefined}
+          className={'nav-link ' + (section === page ? 'nav-active' : '')}><Icon size={18}/> {label}</Link>)}
       </div>
       <div className="sidebar-footer">
         <div className="org-icon"><BriefcaseBusiness size={17} /></div>
@@ -66,7 +72,7 @@ export function Shell({ identity, section, detail, onSearch, onAgenda, children 
           <button className="icon-button menu-trigger" onClick={() => mobile.current?.showModal()} aria-label="Apri menu"><Menu size={21}/></button>
           <PanelTop size={16} className="breadcrumb-icon" aria-hidden="true"/>
           <span className="breadcrumb-root">Area di lavoro</span><ChevronRight size={14} className="breadcrumb-root" />
-          {detail ? <Link href={overview}>Cantieri</Link> : <strong>{section === 'cantieri' ? 'Cantieri' : 'Gestione accessi'}</strong>}
+          {detail && section === 'cantieri' ? <Link href={overview}>Cantieri</Link> : <strong>{sectionLabel}</strong>}
           {detail && <><ChevronRight size={14}/><strong className="breadcrumb-detail">{detail}</strong></>}
         </div>
         <div className="top-actions">

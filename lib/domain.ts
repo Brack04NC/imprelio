@@ -50,7 +50,7 @@ const time = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable();
 export const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('site'), id, name: text(120).min(1), city: text(100).min(1),
     address: text(200), manager: text(100), status: z.enum(siteStates), client_id: id.nullable(),
-    new_client: text(140) }),
+    new_client: text(140) }).refine(data => Boolean(data.client_id || data.new_client), { message: 'Seleziona il cliente.' }),
   z.object({ action: z.literal('job'), id, site_id: id, kind: z.enum(jobKinds), zone: text(120),
     due_date: date, time, notes: text(2000), status: z.enum(jobStates) }),
   z.object({ action: z.literal('jobStatus'), id, site_id: id, status: z.enum(jobStates) }),

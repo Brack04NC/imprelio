@@ -1,15 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Building2, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, ClipboardList, Clock3, HardHat, MapPin, Pencil, Plus, Search, SlidersHorizontal, UserRound, X, Check, Layers3, MoveUpRight, Wrench, ScanSearch } from 'lucide-react';
 import { demoKey, demoWorkspace, getDemo, updateDemo } from '@/lib/demo';
 import { formatDate, jobLabels, kindLabels, PAGE_SIZE, parseWorkspaceParams, siteLabels, siteStates, type Action, type AgendaItem, type Identity, type Job, type Row, type Site, type Workspace } from '@/lib/domain';
 import { requestWorkspace } from '@/lib/client-api';
-import { Shell } from './shell';
+import { Shell, orgLink } from './shell';
 import { Editor } from './editor';
+import { OperationLinks } from './operation-links';
 
-type EditorState = { type: 'site'; site?: Site } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
+type EditorState = { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
 type AgendaPeriod = 'today' | 'week' | 'overdue';
 
 const periodLabels: Record<AgendaPeriod, string> = { today: 'Oggi', week: 'Prossimi 7 gg', overdue: 'In ritardo' };
@@ -41,6 +43,8 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   const queryState = search.get('stato') ?? '';
   const queryPage = search.get('pagina') ?? '';
   const selected = pathname.split('/')[2] ?? search.get('cantiere');
+  const newSiteRequested = !selected && search.get('nuovo') === '1';
+  const preferredClient = search.get('cliente');
   const filters = useMemo(() => parseWorkspaceParams(
     new URLSearchParams({ q: queryTerm, stato: queryState, pagina: queryPage }), selected,
   ), [queryTerm, queryState, queryPage, selected]);
@@ -133,6 +137,17 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   });
 
   useEffect(() => {
+    if (!newSiteRequested) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('nuovo') !== '1') return;
+    url.searchParams.delete('nuovo');
+    url.searchParams.delete('cliente');
+    window.history.replaceState(null, '', url.pathname + url.search);
+    restoreFocus.current = document.activeElement as HTMLElement | null;
+    setEditor({ type: 'site', clientId: preferredClient ?? undefined });
+  }, [newSiteRequested, preferredClient]);
+
+  useEffect(() => {
     if (search.get('cerca') === '1') {
       pendingFocus.current = 'search';
       window.history.replaceState(null, '', makeUrl(overview, { vista: 'elenco', cerca: null }));
@@ -220,7 +235,9 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
         </div>
         <dl className="site-data">
           <div><dt><MapPin size={16}/> Indirizzo</dt><dd>{[current.site.address, current.site.city].filter(Boolean).join(', ')}</dd></div>
-          <div><dt><Building2 size={16}/> Cliente</dt><dd>{current.site.client || 'Da assegnare'}</dd></div>
+          <div><dt><Building2 size={16}/> Cliente</dt><dd>{current.site.client_id
+            ? <Link className="site-client-link" href={orgLink('/clienti?cliente=' + current.site.client_id, identity)}>{current.site.client} <ArrowUpRight size={15}/></Link>
+            : 'Da assegnare'}</dd></div>
           <div><dt><UserRound size={16}/> Responsabile</dt><dd>{current.site.manager || 'Da assegnare'}</dd></div>
         </dl>
       </section>
@@ -244,6 +261,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
           </li>;
         })}</ul> : <div className="empty"><CalendarDays size={26}/><strong>Nessun intervento programmato</strong><p>Aggiungi un sopralluogo, un montaggio o un altro lavoro.</p></div>}
       </section>
+      <OperationLinks identity={identity} site={current.site}/>
     </> : <div className="panel empty" role="status">
       {loading || (!identity.demo && workspace === initial && !readError) ? 'Caricamento cantiere…' : 'Cantiere non disponibile.'}
       <SiteAnchor href={overview} onOpen={href => window.history.pushState(null, '', href)} className="button secondary">Torna ai cantieri</SiteAnchor>
@@ -300,6 +318,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
           {agendaItems.length > 0 && <div className="agenda-footer"><Clock3 size={15}/>{agendaItems.length} {agendaItems.length === 1 ? 'intervento' : 'interventi'}</div>}
         </section>
       </div>
+      <OperationLinks identity={identity}/>
     </>}
     {editor && <Editor editor={editor} clients={workspace.clients} today={today} onClose={closeEditor} save={save}/>}
     {notice && <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.error ? <CircleAlert size={19}/> : <Check size={19}/>} {notice.text}<button className="icon-button" onClick={() => setNotice(null)} aria-label="Chiudi avviso"><X size={17}/></button></div>}

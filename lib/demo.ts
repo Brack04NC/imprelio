@@ -19,7 +19,7 @@ export function demoSeed(today: string): Demo {
     { name: 'Residenza Navigli', city: 'Milano', address: 'Ripa di Porta Ticinese 38', manager: 'Marco Bellini', status: 'closed' },
     { name: 'Corte degli Olmi', city: 'Monza', address: 'Via degli Olmi 8', manager: 'Luca Ferretti', status: 'active' },
     { name: 'Palazzo delle Arti', city: 'Bergamo', address: 'Via Tasso 19', manager: 'Sara Colombo', status: 'planned' },
-  ].map((site, i) => ({ ...site, status: site.status as Site['status'], id: key(40 + i), code: 'CAN-' + String(i + 1).padStart(3, '0'), client_id: clients[i].id }));
+  ].map((site, i) => ({ ...site, status: site.status as Site['status'], id: key(40 + i), code: 'CAN-' + String(i + 1).padStart(3, '0'), client_id: clients[i === 5 ? 0 : i].id }));
   const jobs: Job[] = [
     { site_id: key(40), due_date: today, time: '08:00', kind: 'assembly', zone: 'Facciata nord', status: 'progress' },
     { site_id: key(41), due_date: today, time: '11:30', kind: 'survey', zone: 'Cortile interno', status: 'scheduled' },
@@ -77,9 +77,10 @@ export function updateDemo(store: Demo, action: Action): Demo {
       let client_id = action.client_id;
       if (new_client) {
         const existing = next.clients.find(client => client.name.toLowerCase() === new_client.toLowerCase());
-        client_id = existing?.id ?? id;
+        client_id = existing?.id ?? crypto.randomUUID();
         if (!existing) next.clients.push({ id: client_id, name: new_client });
       }
+      if (!client_id || !next.clients.some(client => client.id === client_id)) throw new Error('Seleziona il cliente del cantiere.');
       const existing = next.sites.find(site => site.id === id);
       const code = existing?.code ?? 'CAN-' + String(next.sites.length + 1).padStart(3, '0');
       const value = { id, name, city, address, manager, status, client_id, code };
@@ -88,16 +89,21 @@ export function updateDemo(store: Demo, action: Action): Demo {
     }
     case 'job': {
       const { id, site_id, kind, zone, due_date, time, notes, status } = action;
+      if (!next.sites.some(site => site.id === site_id) || next.jobs.some(job => job.id === id && job.site_id !== site_id))
+        throw new Error('L’intervento o il cantiere collegato non è più disponibile.');
       const value = { id, site_id, kind, zone, due_date, time, notes, status };
       next.jobs = next.jobs.some(job => job.id === id)
         ? next.jobs.map(job => job.id === id && job.site_id === site_id ? value : job) : [...next.jobs, value];
       break;
     }
     case 'jobStatus':
+      if (!next.jobs.some(job => job.id === action.id && job.site_id === action.site_id))
+        throw new Error('L’intervento non è più disponibile.');
       next.jobs = next.jobs.map(job => job.id === action.id && job.site_id === action.site_id ? { ...job, status: action.status } : job);
       break;
     case 'invite':
-      if (!next.access.invitations.some(item => item.email === action.email) && !next.access.members.some(item => item.email === action.email)) {
+      if (next.access.members.some(item => item.email === action.email)) throw new Error('Questa persona ha già accesso all’azienda.');
+      if (!next.access.invitations.some(item => item.email === action.email)) {
         next.access.invitations.push({ email: action.email, created_at: new Date().toISOString() });
       }
       break;
@@ -112,7 +118,14 @@ export const demoKey = 'imprelio-demo-v1';
 export function getDemo(today: string): Demo {
   try {
     const storage = localStorage.getItem(demoKey);
-    if (storage) return JSON.parse(storage) as Demo;
+    const value = (storage ? JSON.parse(storage) : null) as Partial<Demo> | null;
+    const validList = (items: unknown, fields: string[]) => Array.isArray(items) && items.every(item =>
+      item && typeof item === 'object' && fields.every(field => typeof item[field] === 'string'));
+    if (value && validList(value.sites, ['id', 'name', 'city', 'code'])
+      && validList(value.jobs, ['id', 'site_id', 'due_date', 'kind', 'status'])
+      && validList(value.clients, ['id', 'name'])
+      && validList(value.access?.members, ['user_id', 'email', 'role'])
+      && validList(value.access?.invitations, ['email', 'created_at'])) return value as Demo;
   } catch { /* Use sample data if storage is unreadable. */ }
   return demoSeed(today);
 }
