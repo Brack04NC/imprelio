@@ -67,7 +67,9 @@ export async function readAccess(db: Database, org: string): Promise<Access> {
 }
 
 export function authRedirect() {
-  const url = new URL('/auth/conferma', process.env.IMPRELIO_SITE_URL || 'http://localhost:3000');
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  const siteUrl = process.env.IMPRELIO_SITE_URL || (vercelHost ? `https://${vercelHost}` : 'http://localhost:3000');
+  const url = new URL('/auth/conferma', siteUrl);
   return url.href;
 }
 
