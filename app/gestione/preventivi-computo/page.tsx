@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { EstimatePricing } from '@/components/estimate-pricing';
 import { Shell } from '@/components/shell';
-import { session } from '@/lib/backend';
+import { readClientOptions, session } from '@/lib/backend';
+import { demoSeed } from '@/lib/demo';
 import { romeDate } from '@/lib/domain';
 import { readPricing } from '@/lib/estimate-pricing-backend';
 import { operationSites } from '@/lib/operations-backend';
@@ -13,7 +14,8 @@ export default async function PreventiviComputo({ searchParams }: { searchParams
   const { identity, db, signedIn } = await session(query.azienda);
   if (!identity) redirect(signedIn ? '/login?errore=accesso' : '/login');
   const today = romeDate();
-  const sites = db ? await operationSites(db, identity.org.id) : demoSiteOptions(today);
+  const [sites, clients] = db ? await Promise.all([operationSites(db, identity.org.id), readClientOptions(db, identity.org.id)])
+    : [demoSiteOptions(today), demoSeed(today).clients];
   const selectedSite = sites.find(site => site.id === query.cantiere)?.id;
   const filters = new URLSearchParams();
   if (selectedSite) filters.set('cantiere', selectedSite);
@@ -25,7 +27,7 @@ export default async function PreventiviComputo({ searchParams }: { searchParams
   }) : { rates: [], quotes: [] };
   return <Shell identity={identity} section="preventivi-computo">
     {pricing ? <EstimatePricing key={identity.org.id + ':' + (query.cantiere ?? '')} identity={identity} initial={pricing}
-      sites={sites} today={today} requestedSite={query.cantiere}/> :
+      sites={sites} clients={clients} today={today} requestedSite={query.cantiere}/> :
       <section className="empty panel"><strong>Preventivi da PDF in attesa dell’aggiornamento del database</strong>
         <p>Applica la migrazione Preventivi da computo in Supabase.</p><Link href={back} className="button secondary">Torna ai computi</Link>
       </section>}

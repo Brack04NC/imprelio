@@ -47,7 +47,7 @@ export type Definition = {
 export type OperationWrite =
   | { action: 'save' } & Omit<OperationRecord, 'archived' | 'updated_at'>
   | { action: 'archive' | 'restore'; id: string; kind: OperationKind };
-export type SiteOption = { id: string; name: string; city: string; client: string };
+export type SiteOption = { id: string; name: string; city: string; client_id: string | null; client: string };
 
 export const areas = {
   magazzino: { title: 'Magazzino', kinds: ['article', 'movement'], description: 'Materiali, attrezzature, veicoli e movimenti di carico e scarico.' },

@@ -43,7 +43,6 @@
 .grandTotal strong { font-size: clamp(19px, 3vw, 26px); font-variant-numeric: tabular-nums; }
 .draftFields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 11px; }
 .draftTitle { grid-column: 1 / -1; }
-.draftFields input[readonly] { background: #f4f6fa; }
 .siteActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .archiveActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .archiveActions p:not([role=alert]) { color: var(--muted); }

@@ -71,7 +71,7 @@ export function localOperations(today: string, area: OperationArea) {
 export function demoSiteOptions(today: string, persisted = false): SiteOption[] {
   const store = persisted ? getDemo(today) : demoSeed(today);
   return store.sites.map(site => ({
-    id: site.id, name: site.name, city: site.city,
+    id: site.id, name: site.name, city: site.city, client_id: site.client_id,
     client: store.clients.find(client => client.id === site.client_id)?.name ?? '',
   }));
 }

@@ -21,12 +21,12 @@ export async function readOperations(db: Database, organization: string, area: O
 export async function operationSites(db: Database, organization: string): Promise<SiteOption[]> {
   const sites: SiteOption[] = [];
   for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await db.from('sites').select('id,name,city,clients(name)')
+    const { data, error } = await db.from('sites').select('id,name,city,client_id,clients(name)')
       .eq('organization_id', organization).order('name').order('id').range(offset, offset + pageSize - 1);
     if (error) throw error;
     for (const entry of data) {
       const client = entry.clients as unknown as {name: string} | null;
-      sites.push({ id: entry.id, name: entry.name, city: entry.city, client: client?.name ?? '' });
+      sites.push({ id: entry.id, name: entry.name, city: entry.city, client_id: entry.client_id, client: client?.name ?? '' });
     }
     if (data.length < pageSize) return sites;
   }

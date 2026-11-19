@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { requestWorkspace } from '@/lib/client-api';
 import { demoKey, getDemo, updateDemo } from '@/lib/demo';
-import type { Action, Client, Identity } from '@/lib/domain';
+import type { Action, Client, Identity, Workspace } from '@/lib/domain';
 import type { SiteOption } from '@/lib/operation-types';
 import { Drawer, Editor, type SitePrefill } from './editor';
 
-export function SiteFromEstimate({ prefill, identity, today, onClose, onCreated }: {
-  prefill: SitePrefill; identity: Identity; today: string; onClose: () => void; onCreated: (site: SiteOption) => void;
+export function SiteFromEstimate({ prefill, clientId, identity, today, onClose, onCreated }: {
+  prefill: SitePrefill; clientId?: string; identity: Identity; today: string; onClose: () => void; onCreated: (site: SiteOption) => void;
 }) {
   const [clients, setClients] = useState<Client[] | null>(null);
   const [error, setError] = useState('');
@@ -29,19 +29,27 @@ export function SiteFromEstimate({ prefill, identity, today, onClose, onCreated 
 
   async function save(action: Action) {
     if (action.action !== 'site') return;
-    const { id, name, city, client_id, new_client } = action;
-    let client = clients?.find(item => item.id === client_id)?.name ?? new_client;
     if (identity.demo) {
       const next = updateDemo(getDemo(today), action);
+      const site = next.sites.find(item => item.id === action.id);
+      if (!site) throw new Error('Il cantiere non è disponibile.');
+      const { id, name, city, client_id } = site;
+      const client = next.clients.find(item => item.id === client_id)?.name ?? '';
       localStorage.setItem(demoKey, JSON.stringify(next));
-      client = next.clients.find(item => item.id === next.sites.find(site => site.id === id)?.client_id)?.name ?? client;
-    } else {
-      await requestWorkspace(new URLSearchParams({ azienda: org }), undefined, action);
+      onCreated({ id, name, city, client_id, client });
+      return;
     }
-    onCreated({ id, name, city, client });
+
+    await requestWorkspace(new URLSearchParams({ azienda: org }), undefined, action);
+    const pendingSelection = 'Cantiere salvato. Riprova per selezionarlo nel computo.';
+    const { current } = await requestWorkspace<Workspace>(new URLSearchParams({ azienda: org, cantiere: action.id }))
+      .catch(() => { throw new Error(pendingSelection); });
+    if (!current || current.site.id !== action.id) throw new Error(pendingSelection);
+    const { id, name, city, client_id, client } = current.site;
+    onCreated({ id, name, city, client_id, client });
   }
 
-  if (clients) return <Editor editor={{ type: 'site', prefill }} clients={clients} today={today} onClose={onClose} save={save}/>;
+  if (clients) return <Editor editor={{ type: 'site', prefill, clientId }} clients={clients} today={today} onClose={onClose} save={save}/>;
   return <Drawer title="Crea cantiere dal computo" onClose={onClose}>
     <div className="drawer-fields">
       {error ? <>

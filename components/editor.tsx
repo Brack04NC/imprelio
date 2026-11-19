@@ -32,10 +32,11 @@ export function Editor({ editor, clients, today, defaultTime, onClose, save }: E
   const job = editor.type === 'job' && 'site' in editor ? editor.job : undefined;
   const site = editor.type === 'site' ? editor.site : undefined;
   const prefill = editor.type === 'site' ? editor.prefill : undefined;
+  const preferredClientId = editor.type === 'site' ? editor.clientId || undefined : undefined;
   const clientName = prefill?.clientName.trim().slice(0, 140) ?? '';
   const clientMatch = clientName ? clients.find(client => client.name.toLocaleLowerCase('it') === clientName.toLocaleLowerCase('it')) : undefined;
-  const [newClient, setNewClient] = useState(Boolean(prefill && !clientMatch && (clientName || !clients.length)));
-  const [selectedClient, setSelectedClient] = useState(site?.client_id ?? (editor.type === 'site' ? editor.clientId ?? clientMatch?.id ?? '' : ''));
+  const [newClient, setNewClient] = useState(Boolean(prefill && !preferredClientId && !clientMatch && (clientName || !clients.length)));
+  const [selectedClient, setSelectedClient] = useState(site?.client_id ?? preferredClientId ?? clientMatch?.id ?? '');
   const stableId = useRef<string>(job?.id ?? site?.id ?? '');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);

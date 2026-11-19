@@ -5,11 +5,12 @@ import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, HardHat, Pencil,
 import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 import { Drawer, type SitePrefill } from './editor';
+import { EstimateClientEditor } from './estimate-client-editor';
 import { DownloadEstimatePdf, EstimatePdfArchive, useEstimatePdfArchive } from './estimate-pdf-archive';
 import { SiteFromEstimate } from './site-from-estimate';
 import { orgLink } from './shell';
-import type { Identity } from '@/lib/domain';
-import { demoKey } from '@/lib/demo';
+import type { Client, Identity } from '@/lib/domain';
+import { demoKey, getDemo } from '@/lib/demo';
 import type { SiteOption } from '@/lib/operation-types';
 import { demoSiteOptions } from '@/lib/operations-demo';
 import { documentLineTotal, formatEuro } from '@/lib/operation-documents';
@@ -26,7 +27,7 @@ type PricingAction = z.infer<typeof pricingAction>;
 type DraftItem = ImportedItem & Pick<QuoteLine, 'sourceTitle' | 'sourceDescription'> & {
   selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean;
 };
-type Draft = { id: string; title: string; site: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
+type Draft = { id: string; title: string; site: string; clientFilter?: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
   fileName: string; originalFile?: File; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null;
   sourceMismatch: boolean; appliedRate: EstimateRate | null };
@@ -64,19 +65,21 @@ const demonstration: ImportedItem = {
   description: 'Montaggio ponteggio con un mese di noleggio incluso.', unit: 'm²', quantity: '1900', sourcePrice: '19', sourceTotal: '36100',
 };
 
-export function EstimatePricing({ identity, initial, sites, today, requestedSite }: {
+export function EstimatePricing({ identity, initial, sites, clients, today, requestedSite }: {
   identity: Identity; initial: { rates: EstimateRate[]; quotes: QuoteSummary[] }; sites: SiteOption[];
-  today: string; requestedSite?: string;
+  clients: Client[]; today: string; requestedSite?: string;
 }) {
   const [rates, setRates] = useState(initial.rates);
   const [quotes, setQuotes] = useState(initial.quotes);
   const [savedPage, setSavedPage] = useState(1);
   const [availableSites, setAvailableSites] = useState(sites);
+  const [availableClients, setAvailableClients] = useState(clients);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [draftFilter, setDraftFilter] = useState<'all' | 'review'>('all');
   const [page, setPage] = useState(1);
   const [rateEditor, setRateEditor] = useState<EstimateRate | null>(null);
   const [siteEditor, setSiteEditor] = useState(false);
+  const [clientEditor, setClientEditor] = useState(false);
   const [textEditor, setTextEditor] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -89,6 +92,14 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const draftId = draft?.id;
   const stableSite = availableSites.find(site => site.id === requestedSite)?.id ?? '';
   const draftSite = availableSites.find(site => site.id === draft?.site);
+  const selectedClient = draftSite?.client_id ?? draft?.clientFilter ?? '';
+  const sitesForClient = draft?.clientFilter
+    ? availableSites.filter(site => site.client_id === draft.clientFilter)
+    : availableSites;
+  const sortedClients = useMemo(() => [...availableClients].sort((a, b) => a.name.localeCompare(b.name, 'it')), [availableClients]);
+  const suggestedClient = draft?.siteDetails?.clientName.trim() ?? '';
+  const suggestedName = selectedClient || availableClients.some(client => client.name.toLocaleLowerCase('it') === suggestedClient.toLocaleLowerCase('it'))
+    ? undefined : suggestedClient;
   const archive = useEstimatePdfArchive(identity, stableSite);
   const archivedOriginal = draft ? archive.original(draft.id, draft.site) : undefined;
   const archiveError = draft ? archive.saveError(draft.id, draft.site) : '';
@@ -101,6 +112,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       const stored = localPrices();
       const options = demoSiteOptions(today, true);
       setAvailableSites(options);
+      setAvailableClients(getDemo(today).clients);
       setRates(stored.rates);
       const scoped = options.some(site => site.id === requestedSite) ? requestedSite : undefined;
       setQuotes(stored.quotes.filter(quote => !scoped || quote.site_id === scoped));
@@ -188,8 +200,10 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
         if (refreshedRates) setRates(refreshedRates);
         setRateLoadWarning(refreshedRates === null);
         const fileName = file.name.slice(0, 250);
-        const site = draft?.fileName === fileName ? draft.site || stableSite : stableSite;
-        setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), importIssue, originalFile: file });
+        const sameFile = draft?.fileName === fileName;
+        const site = sameFile ? draft.site : stableSite;
+        setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), clientFilter: sameFile ? draft.clientFilter : undefined,
+          importIssue, originalFile: file });
         setDraftFilter('all'); setPage(1);
       } finally { setProgress(''); }
     });
@@ -219,9 +233,33 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
 
   function siteCreated(site: SiteOption) {
     setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)]);
-    setDraft(current => current && { ...current, site: site.id, createdSite: site.id });
+    if (site.client_id) rememberClient({ id: site.client_id, name: site.client });
+    setDraft(current => current && { ...current, site: site.id, clientFilter: site.client_id ?? '', createdSite: site.id });
     setNotice(draft?.importIssue ? 'Cantiere creato dai dati del computo.' : 'Cantiere creato e selezionato per il preventivo.');
     closeSite();
+  }
+
+  function rememberClient(client: Client) {
+    setAvailableClients(previous => [client, ...previous.filter(item => item.id !== client.id)]);
+  }
+
+  function chooseClient(client: string) {
+    const matches = client ? availableSites.filter(site => site.client_id === client) : [];
+    setDraft(current => current && { ...current, clientFilter: client,
+      site: matches.some(site => site.id === current.site) ? current.site : matches.length === 1 ? matches[0].id : '' });
+    setNotice('');
+  }
+
+  function closeClient() {
+    setClientEditor(false);
+    requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
+  }
+
+  function clientCreated(client: Client) {
+    rememberClient(client);
+    chooseClient(client.id);
+    setNotice('Cliente creato e selezionato.');
+    closeClient();
   }
 
   async function saveRate(rate: EstimateRate) {
@@ -337,22 +375,31 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
           {!draft.importIssue && <label className={styles.draftTitle}>Titolo preventivo
             <input maxLength={160} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/>
           </label>}
-          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} disabled={archive.saving} onChange={event => setDraft({ ...draft, site: event.target.value })}>
-            <option value="">Seleziona il cantiere</option>{availableSites.map(site => <option key={site.id} value={site.id}>{site.name} · {site.city}</option>)}
-          </select></label>
           <label>Cliente
-            <input readOnly value={draftSite?.client ?? ''} placeholder={draftSite ? 'Cliente da assegnare al cantiere' : 'Seleziona il cantiere'}/>
+            <select aria-label="Cliente" value={selectedClient} disabled={archive.saving} onChange={event => chooseClient(event.target.value)}>
+              <option value="">Tutti i clienti</option>
+              {sortedClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+            </select>
           </label>
+          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} disabled={archive.saving} onChange={event => setDraft({ ...draft, site: event.target.value })}>
+            <option value="">{draft.clientFilter && !sitesForClient.length ? 'Nessun cantiere per questo cliente' : 'Seleziona il cantiere'}</option>
+            {sitesForClient.map(site => <option key={site.id} value={site.id}>{site.name} · {site.city}</option>)}
+          </select></label>
         </div>
-        {draft.siteDetails && <div className={styles.siteActions}>
-          {draft.createdSite ? <Link className="button text-button" href={orgLink('/cantieri/' + draft.createdSite, identity)}>
+        <div className={styles.siteActions}>
+          <button type="button" className="button secondary" disabled={busy || archive.saving} onClick={event => {
+            focusBack.current = event.currentTarget;
+            setNotice('');
+            setClientEditor(true);
+          }}><Plus size={17}/> Nuovo cliente</button>
+          {draft.createdSite && draft.createdSite === draft.site ? <Link className="button text-button" href={orgLink('/cantieri/' + draft.createdSite, identity)}>
             Apri il cantiere creato <ArrowUpRight size={16}/>
           </Link> : <button type="button" className="button secondary" disabled={busy || archive.saving} onClick={event => {
             focusBack.current = event.currentTarget;
             setNotice('');
             setSiteEditor(true);
           }}><HardHat size={17}/> Crea cantiere dal computo</button>}
-        </div>}
+        </div>
         {draft.originalFile && <div className={styles.archiveActions}>
           {archivedOriginal ? <>
             <span role="status">PDF originale salvato nel cantiere.</span>
@@ -428,7 +475,9 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
           <button type="button" className="button primary" disabled={!ready || busy} onClick={() => void saveQuote()}><Save size={17}/> Salva preventivo</button>
         </footer></>}
       </section>}
-      {siteEditor && draft?.siteDetails && <SiteFromEstimate prefill={draft.siteDetails} identity={identity} today={today} onClose={closeSite} onCreated={siteCreated}/>}
+      {siteEditor && draft && <SiteFromEstimate prefill={draft.siteDetails ?? { name: draft.title, city: '', address: '', clientName: '' }}
+        clientId={selectedClient || undefined} identity={identity} today={today} onClose={closeSite} onCreated={siteCreated}/>}
+      {clientEditor && <EstimateClientEditor identity={identity} today={today} initialName={suggestedName} onClose={closeClient} onCreated={clientCreated}/>}
       {textEditor !== null && editingItem && <LineTextEditor item={editingItem} onClose={closeText} onApply={updated => {
         setItem(textEditor, reviseQuoteLineText(editingItem, updated));
         closeText();
