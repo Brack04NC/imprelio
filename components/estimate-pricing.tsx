@@ -27,7 +27,8 @@ type DraftItem = ImportedItem & Pick<QuoteLine, 'sourceTitle' | 'sourceDescripti
 };
 type Draft = { id: string; title: string; site: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
   fileName: string; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
-type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null; sourceMismatch: boolean };
+type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null;
+  sourceMismatch: boolean; appliedRate: EstimateRate | null };
 const rowsPerPage = 12;
 
 function localPrices(): Store {
@@ -78,6 +79,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const [textEditor, setTextEditor] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [rateLoadWarning, setRateLoadWarning] = useState(false);
   const [progress, setProgress] = useState('');
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -108,7 +110,8 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
     const duplicates = duplicateEstimateCodes(items);
     return items.map<ReviewRow>((item, index) => {
       const match = matchEstimateRate(item, rates, duplicates);
-      const price = item.manualPrice ?? match.rate?.price ?? '';
+      const appliedRate = item.manualPrice === null ? match.rate : null;
+      const price = item.manualPrice ?? appliedRate?.price ?? '';
       const result = quoteLineSchema.safeParse({
         ...item, price, title: item.title.slice(0, quoteLineTextLimits.title), description: item.description.slice(0, quoteLineTextLimits.description),
         sourceTitle: item.sourceTitle?.slice(0, quoteLineTextLimits.title),
@@ -123,11 +126,12 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
         : item.manualPrice !== null && !result.success ? 'Prezzo da verificare'
         : item.saved ? 'Prezzo salvato' : item.manualPrice !== null ? 'Prezzo manuale' : match.reason;
       const line = result.success && !sourceMismatch ? result.data : null;
-      return { item, index, price, reason, sourceMismatch, line, total: line ? quoteTotal(line) : null };
+      return { item, index, price, reason, sourceMismatch, appliedRate, line, total: line ? quoteTotal(line) : null };
     });
   }, [draft, rates]);
 
   const included = review.filter(row => row.item.selected);
+  const appliedRates = included.filter(row => row.appliedRate).length;
   const pending = included.filter(row => !row.line);
   const lines = included.flatMap(row => row.line ?? []);
   const total = included.reduce((sum, row) => sum + (row.total ?? 0n), 0n);
@@ -165,7 +169,14 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       setProgress('Apertura del PDF…');
       try {
         const { extractEstimate } = await import('@/lib/estimate-pdf');
-        const { items, warnings, siteDetails, importIssue } = await extractEstimate(file, (current, total) => setProgress(`Lettura pagina ${current} di ${total}…`));
+        const latestRates: Promise<EstimateRate[] | null> = identity.demo ? Promise.resolve(localPrices().rates)
+          : remote(new URLSearchParams({ vista: 'listino' })).catch(() => null);
+        const [{ items, warnings, siteDetails, importIssue }, refreshedRates] = await Promise.all([
+          extractEstimate(file, (current, total) => setProgress(`Lettura pagina ${current} di ${total}…`)),
+          latestRates,
+        ]);
+        if (refreshedRates) setRates(refreshedRates);
+        setRateLoadWarning(refreshedRates === null);
         const fileName = file.name.slice(0, 250);
         const site = draft?.fileName === fileName ? draft.site || stableSite : stableSite;
         setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), importIssue });
@@ -280,7 +291,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       <details className={`panel ${styles.details}`}>
         <summary><ClipboardList size={18}/> Listino aziendale <span>{rates.length} prezzi</span></summary>
         <div className={styles.panelContent}>
-          <p>I prezzi si applicano quando coincidono voce, unità e durata del noleggio.</p>
+          <p>All’importazione il listino compila il prezzo delle voci compatibili per codice o testo, unità e durata del noleggio.</p>
           <button className="button secondary" onClick={event => openRate(newRate(), event.currentTarget)}><Plus size={17}/> Aggiungi prezzo</button>
           {listino.length > 0 && <ul className={styles.entries}>{listino.map(rate =>
             <li key={rate.id}><div><strong>{rate.label}</strong><small>{[rate.code, rate.phrase, priceKindLabels[rate.kind], rate.months ? rate.months + (rate.months === 1 ? ' mese' : ' mesi') : ''].filter(Boolean).join(' · ')}</small></div>
@@ -306,10 +317,15 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
         }}>Prova l’esempio da 1.900 m²</button>}
       </section> : <section className={`panel ${styles.work}`} aria-labelledby="draft-heading">
         <div className={styles.workHead}><div><h2 id="draft-heading">{draft.importIssue ? 'Dati del cantiere' : 'Revisione del preventivo'}</h2>
-          <p>{draft.fileName}{!draft.importIssue && ` · ${review.length} ${review.length === 1 ? 'voce importata' : 'voci importate'}`}</p></div>
+          <p>{draft.fileName}{!draft.importIssue && ` · ${review.length} ${review.length === 1 ? 'voce importata' : 'voci importate'}`}</p>
+          {!draft.importIssue && rates.length > 0 && <p role="status">{appliedRates} {appliedRates === 1 ? 'prezzo da listino applicato' : 'prezzi da listino applicati'}</p>}
+        </div>
           {!draft.importIssue && <div className={styles.grandTotal}><span>{pending.length ? 'Totale parziale' : 'Totale lavori'}</span><strong>{formatEuro(total)}</strong><small>IVA esclusa</small></div>}
         </div>
         {draft.importIssue && <p className={styles.warning}>{draft.importIssue} Puoi creare il cantiere dai dati della testata.</p>}
+        {rateLoadWarning && !draft.importIssue && <p role="alert" className={styles.warning}>
+          Aggiornamento del listino non riuscito. Verifica i prezzi già caricati oppure importa di nuovo il PDF.
+        </p>}
         {draft.warnings.length > 0 && <div className={styles.warning}>
           {draft.warnings.map(warning => <p key={warning}>{warning}</p>)}
           <label><input type="checkbox" checked={draft.warningsReviewed} onChange={event => setDraft({ ...draft, warningsReviewed: event.target.checked })}/>
@@ -363,6 +379,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
               </div>
               <div className={styles.rowFoot}>
                 <span className={item.selected && !row.line ? styles.unmatched : styles.matched}>{item.selected ? row.reason : 'Esclusa'}</span>
+                {row.appliedRate && <small>{row.appliedRate.label}</small>}
                 {item.sourcePrice && <small>Prezzo unitario PDF {euroOrDash(item.sourcePrice)}</small>}
                 {item.sourceTotal && (!item.sourcePrice || row.sourceMismatch) && <small>Importo PDF {euroOrDash(item.sourceTotal)}</small>}
                 {row.sourceMismatch && <button className="button text-button" type="button"
@@ -370,10 +387,11 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
                 {item.manualPrice !== null && <button className="button text-button" type="button" onClick={() => setItem(index, { manualPrice: null, saved: false })}>Usa listino</button>}
                 <button className="button text-button" type="button" disabled={busy} aria-label={'Modifica testo voce ' + item.reference}
                   onClick={event => { focusBack.current = event.currentTarget; setTextEditor(index); }}><Pencil size={15}/> Modifica testo</button>
-                <button className="button text-button" type="button" aria-label={'Crea prezzo per voce ' + item.reference} onClick={event => {
-                  const rate = { ...ruleFor(item), price: row.price };
+                <button className="button text-button" type="button" disabled={busy}
+                  aria-label={(row.appliedRate ? 'Apri prezzo di listino per voce ' : 'Crea prezzo per voce ') + item.reference} onClick={event => {
+                  const rate = row.appliedRate ?? { ...ruleFor(item), price: row.price };
                   openRate(rate, event.currentTarget);
-                }}>Aggiungi al listino</button>
+                }}>{row.appliedRate ? 'Apri prezzo di listino' : 'Aggiungi al listino'}</button>
               </div>
             </article>;
           })}
@@ -462,7 +480,7 @@ function RateEditor({ rate, existing, onSave, onRemove, onClose }: {
   const entries = [
     { key: 'label', label: 'Nome lavorazione', required: true, max: 120 },
     { key: 'code', label: 'Codice nel computo', max: 80 },
-    { key: 'phrase', label: 'Parole nel titolo della voce', max: 200 },
+    { key: 'phrase', label: 'Parole nel titolo o all’inizio della descrizione', max: 200 },
     { key: 'unit', label: 'Unità di misura', required: true, max: 40 },
   ] as const;
   return <Drawer title={existing ? 'Modifica prezzo' : 'Aggiungi prezzo al listino'} onClose={onClose} busy={busy}>

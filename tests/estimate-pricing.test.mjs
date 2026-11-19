@@ -27,6 +27,24 @@ test('Il listino applica 12 €/m² soltanto alle voci compatibili con il nolegg
   assert.equal(matchEstimateRate(item, [codeOnly], duplicateEstimateCodes([item, { ...item, reference: '2' }])).rate, null);
 });
 
+test('Il listino riconosce testo a capo, preposizioni e unità equivalenti', () => {
+  const wrapped = { ...item, title: 'Allestimento di', description: '1 Allestimento di ponteggi a telai. Nolo per il primo mese.' };
+  const entry = { ...rate, phrase: 'allestimento ponteggio', unit: 'metri quadrati' };
+  assert.equal(matchEstimateRate(wrapped, [entry]).rate?.price, '12');
+  assert.equal(matchEstimateRate(item, [entry]).rate?.price, '12');
+  assert.equal(matchEstimateRate({ ...wrapped, unit: 'm³' }, [entry]).reason, 'Unità diversa dal listino');
+  assert.equal(matchEstimateRate({ ...wrapped, description: 'Allestimento di ponteggi. Nolo fino a 6 mesi.' }, [entry]).reason,
+    'Tipo di prezzo o durata diversa dal listino');
+  assert.equal(matchEstimateRate({ ...item, title: 'Demolizione facciata', description: 'Demolizione facciata. Accesso con allestimento di ponteggi. Nolo per il primo mese.' }, [entry]).rate, null);
+});
+
+test('Il listino applica prezzi duplicati equivalenti e lascia i prezzi in conflitto da verificare', () => {
+  const similar = { ...rate, id: randomUUID(), price: '12.00' };
+  assert.equal(Number(matchEstimateRate(item, [rate, similar]).rate?.price), 12);
+  assert.equal(matchEstimateRate(item, [rate, similar, { ...similar, id: randomUUID(), price: '13' }]).rate, null);
+  assert.equal(matchEstimateRate(item, [rate, { ...rate, id: randomUUID(), code: item.code, price: '14' }]).rate?.price, '14');
+});
+
 test('I testi del preventivo cambiano senza modificare la corrispondenza al listino', () => {
   assert.equal(quoteLineTextSchema.safeParse({ title: '   ', description: '' }).success, false);
   const edited = { ...item, ...reviseQuoteLineText(item, { title: 'Opere provvisionali', description: 'Prima riga\nSeconda riga' }), price: '12' };

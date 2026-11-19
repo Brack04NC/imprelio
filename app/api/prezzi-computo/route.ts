@@ -2,16 +2,19 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { session } from '@/lib/backend';
 import { pricingAction } from '@/lib/estimate-pricing';
+import { readRates } from '@/lib/estimate-pricing-backend';
 
 const json = NextResponse.json;
 
 export async function GET(request: NextRequest) {
   try {
     const org = request.nextUrl.searchParams.get('azienda');
-    const id = z.uuid().safeParse(request.nextUrl.searchParams.get('id'));
-    if (!id.success) return json({ error: 'Preventivo non valido.' }, { status: 400 });
+    const isRateList = request.nextUrl.searchParams.get('vista') === 'listino';
     const { identity, db } = await session(org);
     if (!db || !identity || identity.org.id !== org) return json({ error: 'Azienda non accessibile.' }, { status: 403 });
+    if (isRateList) return json(await readRates(db, identity.org.id), { headers: { 'Cache-Control': 'no-store' } });
+    const id = z.uuid().safeParse(request.nextUrl.searchParams.get('id'));
+    if (!id.success) return json({ error: 'Preventivo non valido.' }, { status: 400 });
     const { data, error } = await db.from('estimate_quotes').select('id,site_id,title,source_name,created_at,lines')
       .eq('organization_id', identity.org.id).eq('id', id.data).maybeSingle();
     if (error) throw error;

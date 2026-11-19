@@ -6,7 +6,7 @@ import type { EstimateRate, QuoteSummary } from './estimate-pricing';
 type Database = Awaited<ReturnType<typeof database>>;
 const size = 500;
 
-async function readRates(db: Database, org: string) {
+export async function readRates(db: Database, org: string) {
   const rates: EstimateRate[] = [];
   for (let offset = 0; ; offset += size) {
     const { data, error } = await db.from('estimate_rates').select('id,label,code,phrase,unit,kind,months,price')

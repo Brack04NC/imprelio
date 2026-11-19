@@ -71,6 +71,14 @@ function normalizeCode(value: string) {
   return value.toUpperCase().replace(/\s+/g, '').replace(/\.+$/, '');
 }
 
+function lookupPhrase(value: string) {
+  return normalizePhrase(value).replace(/\b(?:di|del|dell|dello|della|dei|degli|delle)\b/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function hasPhrase(text: string, phrase: string) {
+  return (' ' + text + ' ').includes(' ' + phrase + ' ');
+}
+
 type Billing = { kind: PriceKind | 'unknown'; months: number | null };
 export function itemBilling(item: Pick<ImportedItem, 'title' | 'description' | 'unit'> & SourceText): Billing {
   const extra = /\b(?:mes[ei]\s+(?:successiv\w*|aggiuntiv\w*|ulterior\w*)|(?:successiv\w*|aggiuntiv\w*|ulterior\w*)\s+mes[ei])\b/;
@@ -118,20 +126,37 @@ export function duplicateEstimateCodes(items: ImportedItem[]) {
 
 export function matchEstimateRate(item: ImportedItem & SourceText, rules: EstimateRate[], duplicateCodes = new Set<string>()) {
   const unit = normalizeUnit(item.unit);
-  const title = ' ' + normalizePhrase(item.sourceTitle ?? item.title) + ' ';
-  const code = normalizeCode(item.code);
   const billing = itemBilling(item);
   if (!unit || billing.kind === 'unknown') return { rate: null, reason: !unit ? 'Unità da verificare' : 'Durata da verificare' };
-  const matches = rules.flatMap(rate => {
-    if (unit !== rate.unit || billing.kind !== rate.kind || billing.months !== rate.months) return [];
+  if (!rules.length) return { rate: null, reason: 'Voce senza corrispondenza' };
+
+  const title = lookupPhrase(item.sourceTitle ?? item.title);
+  const description = lookupPhrase(item.sourceDescription ?? item.description);
+  const reference = normalizePhrase(item.reference);
+  const lead = reference && description.startsWith(reference + ' ') ? description.slice(reference.length + 1) : description;
+  const code = normalizeCode(item.code);
+  const repeated = duplicateCodes.has(code);
+  const candidates = rules.flatMap(rate => {
     const rateCode = normalizeCode(rate.code);
-    const phrase = normalizePhrase(rate.phrase);
-    if (rateCode && (rateCode !== code || duplicateCodes.has(code) && !phrase)) return [];
-    if (phrase && !title.includes(' ' + phrase + ' ')) return [];
-    if (!rateCode && !phrase) return [];
-    return [{ rate, score: (rateCode ? 1000 : 0) + (phrase ? phrase.length : 0) }];
-  }).sort((a, b) => b.score - a.score);
-  if (!matches.length) return { rate: null, reason: code && duplicateCodes.has(code) ? 'Codice ripetuto. Verifica la voce.' : 'Voce senza corrispondenza' };
-  if (matches[1]?.score === matches[0].score) return { rate: null, reason: 'Più prezzi compatibili. Scegli quello corretto.' };
-  return { rate: matches[0].rate, reason: 'Prezzo da listino' };
+    const phrase = lookupPhrase(rate.phrase);
+    if (rateCode && (rateCode !== code || repeated && !phrase)) return [];
+    if (!phrase) return rateCode && !rate.phrase.trim() ? [{ rate, score: 1000 }] : [];
+
+    const inTitle = hasPhrase(title, phrase);
+    const inDescription = lead === phrase || lead.startsWith(phrase + ' ')
+      || Boolean(rateCode && !repeated && hasPhrase(description, phrase));
+    if (!inTitle && !inDescription) return [];
+    return [{ rate, score: (rateCode ? 1000 : 0) + (inTitle ? 400 : 200) + phrase.length }];
+  });
+  if (!candidates.length) return { rate: null, reason: repeated ? 'Codice ripetuto. Verifica la voce.' : 'Voce senza corrispondenza' };
+  const sameUnit = candidates.filter(({ rate }) => normalizeUnit(rate.unit) === unit);
+  if (!sameUnit.length) return { rate: null, reason: 'Unità diversa dal listino' };
+  const matches = sameUnit.filter(({ rate }) => billing.kind === rate.kind && billing.months === rate.months)
+    .sort((a, b) => b.score - a.score);
+  const best = matches[0];
+  if (!best) return { rate: null, reason: 'Tipo di prezzo o durata diversa dal listino' };
+  if (matches.some(match => match.score === best.score && Number(match.rate.price) !== Number(best.rate.price))) {
+    return { rate: null, reason: 'Più prezzi compatibili. Scegli quello corretto.' };
+  }
+  return { rate: best.rate, reason: 'Prezzo da listino' };
 }
