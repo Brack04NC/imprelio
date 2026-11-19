@@ -1,11 +1,12 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import { estimateHeaderText, estimateImportWarnings, readEstimatePages, type PdfPage } from './estimate-import';
+import { estimatePdfMaxBytes } from './estimate-pdf-archive';
 import { extractEstimateSite } from './estimate-site';
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 export async function extractEstimate(file: File, onPage: (page: number, total: number) => void) {
-  if (!/\.pdf$/i.test(file.name) || file.size > 25 * 1024 * 1024) throw new Error('Scegli un PDF di massimo 25 MB.');
+  if (!/\.pdf$/i.test(file.name) || file.size > estimatePdfMaxBytes) throw new Error('Scegli un PDF di massimo 25 MB.');
   const data = new Uint8Array(await file.arrayBuffer());
   const task = getDocument({ data, useSystemFonts: true, stopAtErrors: true });
   try {

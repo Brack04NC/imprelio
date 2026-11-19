@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, HardHat, Pencil,
 import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 import { Drawer, type SitePrefill } from './editor';
+import { DownloadEstimatePdf, EstimatePdfArchive, useEstimatePdfArchive } from './estimate-pdf-archive';
 import { SiteFromEstimate } from './site-from-estimate';
 import { orgLink } from './shell';
 import type { Identity } from '@/lib/domain';
@@ -26,7 +27,7 @@ type DraftItem = ImportedItem & Pick<QuoteLine, 'sourceTitle' | 'sourceDescripti
   selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean;
 };
 type Draft = { id: string; title: string; site: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
-  fileName: string; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
+  fileName: string; originalFile?: File; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null;
   sourceMismatch: boolean; appliedRate: EstimateRate | null };
 const rowsPerPage = 12;
@@ -88,6 +89,9 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const draftId = draft?.id;
   const stableSite = availableSites.find(site => site.id === requestedSite)?.id ?? '';
   const draftSite = availableSites.find(site => site.id === draft?.site);
+  const archive = useEstimatePdfArchive(identity, stableSite);
+  const archivedOriginal = draft ? archive.original(draft.id, draft.site) : undefined;
+  const archiveError = draft ? archive.saveError(draft.id, draft.site) : '';
   const listino = useMemo(() => [...rates].sort((a, b) => a.label.localeCompare(b.label, 'it')), [rates]);
   const editingItem = textEditor === null ? undefined : draft?.items[textEditor];
 
@@ -185,7 +189,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
         setRateLoadWarning(refreshedRates === null);
         const fileName = file.name.slice(0, 250);
         const site = draft?.fileName === fileName ? draft.site || stableSite : stableSite;
-        setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), importIssue });
+        setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), importIssue, originalFile: file });
         setDraftFilter('all'); setPage(1);
       } finally { setProgress(''); }
     });
@@ -284,7 +288,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       </Link>
       <header className="page-header"><div><h1>Preventivi da PDF</h1>
         <p>Applica il tuo listino al computo e verifica le voci prima di salvare.</p></div></header>
-      <PdfImportPanel busy={busy} replacing={Boolean(draft)} onFile={file => void loadPdf(file)} onError={setError}/>
+      <PdfImportPanel busy={busy || archive.saving} replacing={Boolean(draft)} onFile={file => void loadPdf(file)} onError={setError}/>
       {!draft && identity.demo && <button className={`button text-button ${styles.example}`} disabled={busy} onClick={() => {
         setDraft(makeDraft([demonstration], 'Esempio ponteggio.pdf', stableSite || availableSites[0]?.id || ''));
         setPage(1); setDraftFilter('all'); setError('');
@@ -292,6 +296,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       {progress && <p role="status" className={styles.notice}>{progress}</p>}
       {notice && <p role="status" className={styles.notice}>{notice}</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
+      <EstimatePdfArchive identity={identity} archive={archive} sites={availableSites}/>
       <details className={`panel ${styles.details}`}>
         <summary><ClipboardList size={18}/> Listino aziendale <span>{rates.length} prezzi</span></summary>
         <div className={styles.panelContent}>
@@ -306,7 +311,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       {quotes.length > 0 && <details className={`panel ${styles.details}`}><summary><Save size={18}/> Preventivi salvati <span>{quotes.length}</span></summary>
         <ul className={styles.entries}>{quotes.slice((savedPage - 1) * rowsPerPage, savedPage * rowsPerPage).map(quote => <li key={quote.id}><div><strong>{quote.title}</strong>
           <small>{availableSites.find(site => site.id === quote.site_id)?.name ?? quote.source_name}</small></div>
-          <button className="button secondary" disabled={busy} aria-label={'Apri preventivo ' + quote.title} onClick={() => void openQuote(quote.id)}>Apri</button></li>)}</ul>
+          <button className="button secondary" disabled={busy || archive.saving} aria-label={'Apri preventivo ' + quote.title} onClick={() => void openQuote(quote.id)}>Apri</button></li>)}</ul>
         {quotes.length > rowsPerPage && <div className={styles.historyPages}>
           <button className="button secondary" disabled={savedPage === 1} onClick={() => setSavedPage(savedPage - 1)}>Precedenti</button>
           <button className="button secondary" disabled={savedPage * rowsPerPage >= quotes.length} onClick={() => setSavedPage(savedPage + 1)}>Successivi</button>
@@ -328,20 +333,38 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
           <label><input type="checkbox" checked={draft.warningsReviewed} onChange={event => setDraft({ ...draft, warningsReviewed: event.target.checked })}/>
             Ho verificato che le voci importate coprono il preventivo.</label>
         </div>}
-        {!draft.importIssue && <div className={`form-grid ${styles.draftFields}`}>
-          <label>Titolo preventivo<input maxLength={160} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
-          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} onChange={event => setDraft({ ...draft, site: event.target.value })}>
-            <option value="">Seleziona il cantiere</option>{availableSites.map(site => <option key={site.id} value={site.id}>{site.name} · {site.client || site.city}</option>)}
+        <div className={`form-grid ${styles.draftFields}`}>
+          {!draft.importIssue && <label className={styles.draftTitle}>Titolo preventivo
+            <input maxLength={160} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/>
+          </label>}
+          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} disabled={archive.saving} onChange={event => setDraft({ ...draft, site: event.target.value })}>
+            <option value="">Seleziona il cantiere</option>{availableSites.map(site => <option key={site.id} value={site.id}>{site.name} · {site.city}</option>)}
           </select></label>
-        </div>}
+          <label>Cliente
+            <input readOnly value={draftSite?.client ?? ''} placeholder={draftSite ? 'Cliente da assegnare al cantiere' : 'Seleziona il cantiere'}/>
+          </label>
+        </div>
         {draft.siteDetails && <div className={styles.siteActions}>
           {draft.createdSite ? <Link className="button text-button" href={orgLink('/cantieri/' + draft.createdSite, identity)}>
             Apri il cantiere creato <ArrowUpRight size={16}/>
-          </Link> : <button type="button" className="button secondary" disabled={busy} onClick={event => {
+          </Link> : <button type="button" className="button secondary" disabled={busy || archive.saving} onClick={event => {
             focusBack.current = event.currentTarget;
             setNotice('');
             setSiteEditor(true);
           }}><HardHat size={17}/> Crea cantiere dal computo</button>}
+        </div>}
+        {draft.originalFile && <div className={styles.archiveActions}>
+          {archivedOriginal ? <>
+            <span role="status">PDF originale salvato nel cantiere.</span>
+            <DownloadEstimatePdf identity={identity} file={archivedOriginal} label="Scarica PDF originale"/>
+          </> : <button type="button" className="button secondary" disabled={busy || archive.saving || archive.state !== 'ready' || !draftSite}
+            onClick={() => { if (draft.originalFile && draftSite) void archive.save(draft.id, draftSite.id, draft.originalFile); }}>
+            <Save size={17} aria-hidden="true"/>{archive.saving ? 'Salvataggio PDF…' : 'Salva PDF originale'}
+          </button>}
+          {!draftSite && <p>Seleziona o crea un cantiere per archiviare il PDF.</p>}
+          {archive.state === 'migration' && <p>Attiva il salvataggio seguendo le istruzioni in Archivio computi PDF.</p>}
+          {archive.state === 'error' && <p>Ricarica l’Archivio computi PDF per riprovare.</p>}
+          {archiveError && <p role="alert" className="form-error">{archiveError}</p>}
         </div>}
         {!draft.importIssue && <><div className={styles.toolbar}>
           <button className="button secondary" aria-pressed={draftFilter === 'all'} onClick={() => { setDraftFilter('all'); setPage(1); }}>Tutte ({review.length})</button>
