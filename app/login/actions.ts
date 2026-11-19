@@ -1,24 +1,24 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { authRedirect, database, demoMode } from '@/lib/backend';
+import { database, demoMode } from '@/lib/backend';
 
 export async function signIn(form: FormData) {
   if (demoMode) redirect('/cantieri');
-  const result = z.email().safeParse(String(form.get('email') ?? '').trim().toLowerCase());
-  if (!result.success) redirect('/login?errore=email');
-  // Email links use token_hash, allowing them to open on any device without a local PKCE verifier.
-  const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
+  const result = z.object({
+    email: z.email(),
+    password: z.string().min(8).max(128),
+  }).safeParse({
+    email: String(form.get('email') ?? '').trim().toLowerCase(),
+    password: String(form.get('password') ?? ''),
   });
-  const { error } = await db.auth.signInWithOtp({ email: result.data, options: {
-    shouldCreateUser: false, emailRedirectTo: authRedirect(),
-  } });
-  if (error?.status === 429) redirect('/login?errore=attendi');
-  if (error && (!error.status || error.status >= 500)) redirect('/login?errore=invio');
-  redirect('/login?inviato=1');
+  if (!result.success) redirect('/login?errore=credenziali');
+
+  const db = await database();
+  const { error } = await db.auth.signInWithPassword(result.data);
+  if (error) redirect('/login?errore=credenziali');
+  redirect('/cantieri');
 }
 
 export async function signOut() {
