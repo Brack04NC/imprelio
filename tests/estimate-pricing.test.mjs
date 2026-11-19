@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { estimateImportWarnings, readEstimatePages, unitFromSubtotal } from '../lib/estimate-import.ts';
-import { duplicateEstimateCodes, itemBilling, matchEstimateRate, rateSchema, sourceAmountDisagrees } from '../lib/estimate-pricing.ts';
+import { duplicateEstimateCodes, itemBilling, matchEstimateRate, quoteLineSchema, quoteLineTextSchema, rateSchema,
+  reviseQuoteLineText, sourceAmountDisagrees } from '../lib/estimate-pricing.ts';
 import { documentLineTotal } from '../lib/operation-documents.ts';
 
 const item = { title: 'Allestimento di ponteggi', description: 'Montaggio, smontaggio e un mese di noleggio incluso.',
@@ -24,6 +25,24 @@ test('Il listino applica 12 €/m² soltanto alle voci compatibili con il nolegg
   assert.deepEqual(itemBilling({ ...item, title: 'Ponteggio per ogni mese successivo' }), { kind: 'extension', months: null });
   const codeOnly = { ...rate, phrase: '', code: item.code };
   assert.equal(matchEstimateRate(item, [codeOnly], duplicateEstimateCodes([item, { ...item, reference: '2' }])).rate, null);
+});
+
+test('I testi del preventivo cambiano senza modificare la corrispondenza al listino', () => {
+  assert.equal(quoteLineTextSchema.safeParse({ title: '   ', description: '' }).success, false);
+  const edited = { ...item, ...reviseQuoteLineText(item, { title: 'Opere provvisionali', description: 'Prima riga\nSeconda riga' }), price: '12' };
+  const reopened = quoteLineSchema.parse(JSON.parse(JSON.stringify(edited)));
+  assert.equal(reopened.title, 'Opere provvisionali');
+  assert.equal(reopened.description, 'Prima riga\nSeconda riga');
+  assert.equal(reopened.sourceTitle, item.title);
+  assert.equal(reopened.sourceDescription, item.description);
+  assert.equal(matchEstimateRate(reopened, [rate]).rate?.price, '12');
+  assert.deepEqual(itemBilling(reopened), { kind: 'rental', months: 1 });
+
+  const updated = { ...reopened, ...reviseQuoteLineText(reopened, { title: item.title, description: '' }) };
+  assert.equal(quoteLineSchema.parse(updated).description, '');
+  assert.equal(updated.sourceTitle, undefined);
+  assert.equal(updated.sourceDescription, item.description);
+  assert.equal(matchEstimateRate(updated, [rate]).rate?.price, '12');
 });
 
 test('Il lettore distingue quantità, prezzo unitario e importo e gestisce le unità unite al testo', () => {
@@ -89,7 +108,13 @@ test('Listini e preventivi sono isolati per azienda, anche nei collegamenti al c
   const line = { ...item, unit: 'm²', price: '12' };
   await assert.rejects(saveQuote(secondSite, [line]), { code: '23503' });
   await assert.rejects(saveQuote(firstSite, [{ ...line, price: 'x' }]), { code: '23514' });
-  await saveQuote(firstSite, Array.from({ length: 112 }, () => line));
+  const edited = quoteLineSchema.parse({
+    ...line, ...reviseQuoteLineText(line, { title: 'Voce personalizzata', description: 'Prima riga\nSeconda riga' }),
+  });
+  await saveQuote(firstSite, [edited, ...Array.from({ length: 111 }, () => line)]);
+  const saved = (await db.query('select lines from public.estimate_quotes where id = $1', [quote])).rows[0].lines[0];
+  assert.deepEqual(saved, edited);
+  assert.equal(matchEstimateRate(saved, [rate]).rate?.price, '12');
   await db.query('update public.estimate_quotes set title = $1 where id = $2', ['Preventivo aggiornato', quote]);
   await assert.rejects(db.query('update public.estimate_quotes set id = $1 where id = $2', [randomUUID(), quote]), { code: '23514' });
   await assert.rejects(db.query('update public.estimate_rates set id = $1 where id = $2', [randomUUID(), rate.id]), { code: '23514' });

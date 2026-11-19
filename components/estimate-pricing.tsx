@@ -12,8 +12,9 @@ import { demoKey } from '@/lib/demo';
 import type { SiteOption } from '@/lib/operation-types';
 import { demoSiteOptions } from '@/lib/operations-demo';
 import { documentLineTotal, formatEuro } from '@/lib/operation-documents';
-import { amount, duplicateEstimateCodes, itemBilling, matchEstimateRate, priceKindLabels, priceKinds, pricingAction, quoteLineSchema, quoteSchema, rateSchema, sourceAmountDisagrees,
-  type EstimateQuote, type EstimateRate, type QuoteInput, type QuoteLine, type QuoteSummary } from '@/lib/estimate-pricing';
+import { amount, duplicateEstimateCodes, itemBilling, matchEstimateRate, priceKindLabels, priceKinds, pricingAction, quoteLineSchema, quoteLineTextLimits,
+  quoteLineTextSchema, quoteSchema, rateSchema, reviseQuoteLineText, sourceAmountDisagrees,
+  type EstimateQuote, type EstimateRate, type QuoteInput, type QuoteLine, type QuoteLineText, type QuoteSummary } from '@/lib/estimate-pricing';
 import type { ImportedItem } from '@/lib/estimate-import';
 import styles from './estimate-pricing.module.css';
 
@@ -21,7 +22,9 @@ const localKey = 'imprelio-estimate-pricing-v1';
 const storedSchema = z.object({ rates: z.array(rateSchema), quotes: z.array(quoteSchema.extend({ created_at: z.iso.datetime() })) });
 type Store = z.infer<typeof storedSchema>;
 type PricingAction = z.infer<typeof pricingAction>;
-type DraftItem = ImportedItem & { selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean };
+type DraftItem = ImportedItem & Pick<QuoteLine, 'sourceTitle' | 'sourceDescription'> & {
+  selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean;
+};
 type Draft = { id: string; title: string; site: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
   fileName: string; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null; sourceMismatch: boolean };
@@ -72,6 +75,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const [page, setPage] = useState(1);
   const [rateEditor, setRateEditor] = useState<EstimateRate | null>(null);
   const [siteEditor, setSiteEditor] = useState(false);
+  const [textEditor, setTextEditor] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
@@ -81,6 +85,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const stableSite = availableSites.find(site => site.id === requestedSite)?.id ?? '';
   const draftSite = availableSites.find(site => site.id === draft?.site);
   const listino = useMemo(() => [...rates].sort((a, b) => a.label.localeCompare(b.label, 'it')), [rates]);
+  const editingItem = textEditor === null ? undefined : draft?.items[textEditor];
 
   useEffect(() => {
     if (!identity.demo) return;
@@ -105,7 +110,9 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       const match = matchEstimateRate(item, rates, duplicates);
       const price = item.manualPrice ?? match.rate?.price ?? '';
       const result = quoteLineSchema.safeParse({
-        ...item, price, title: item.title.slice(0, 300), description: item.description.slice(0, 4000),
+        ...item, price, title: item.title.slice(0, quoteLineTextLimits.title), description: item.description.slice(0, quoteLineTextLimits.description),
+        sourceTitle: item.sourceTitle?.slice(0, quoteLineTextLimits.title),
+        sourceDescription: item.sourceDescription?.slice(0, quoteLineTextLimits.description),
         sourcePrice: amount(3).safeParse(item.sourcePrice).success ? item.sourcePrice : '',
         sourceTotal: amount(3).safeParse(item.sourceTotal).success ? item.sourceTotal : '',
       });
@@ -173,6 +180,11 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   }
   function closeRate() {
     setRateEditor(null);
+    requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
+  }
+
+  function closeText() {
+    setTextEditor(null);
     requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
   }
 
@@ -244,7 +256,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   function ruleFor(item: DraftItem) {
     const scope = itemBilling(item);
     const kind = scope.kind === 'unknown' ? 'standard' : scope.kind;
-    return { ...newRate(), label: item.title.slice(0, 120), code: item.code.slice(0, 80), phrase: item.title.slice(0, 200),
+    return { ...newRate(), label: item.title.slice(0, 120), code: item.code.slice(0, 80), phrase: (item.sourceTitle ?? item.title).slice(0, 200),
       unit: item.unit, kind, months: kind === 'rental' ? scope.months : null };
   }
 
@@ -338,7 +350,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
                 aria-label={'Includi voce ' + item.reference} onChange={event => setItem(index, { selected: event.target.checked })}/></label>
                 <div><small>Voce {item.reference} · Pag. {item.page}{item.code && ' · ' + item.code}</small>
                   <h3>{item.title}</h3>{term && <span className={styles.term}>{term}</span>}
-                  {item.description !== item.title && <details className={styles.original}><summary>Descrizione del computo</summary><p>{item.description}</p></details>}
+                  {item.description && item.description !== item.title && <details className={styles.original}><summary>Descrizione della voce</summary><p>{item.description}</p></details>}
                 </div></div>
               <div className={styles.rowFields}>
                 <label>Quantità<input aria-label={'Quantità voce ' + item.reference} inputMode="decimal" maxLength={14} value={item.quantity}
@@ -356,6 +368,8 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
                 {row.sourceMismatch && <button className="button text-button" type="button"
                   onClick={() => setItem(index, { sourceChecked: true })}>Conferma quantità</button>}
                 {item.manualPrice !== null && <button className="button text-button" type="button" onClick={() => setItem(index, { manualPrice: null, saved: false })}>Usa listino</button>}
+                <button className="button text-button" type="button" disabled={busy} aria-label={'Modifica testo voce ' + item.reference}
+                  onClick={event => { focusBack.current = event.currentTarget; setTextEditor(index); }}><Pencil size={15}/> Modifica testo</button>
                 <button className="button text-button" type="button" aria-label={'Crea prezzo per voce ' + item.reference} onClick={event => {
                   const rate = { ...ruleFor(item), price: row.price };
                   openRate(rate, event.currentTarget);
@@ -377,11 +391,44 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
         </footer></>}
       </section>}
       {siteEditor && draft?.siteDetails && <SiteFromEstimate prefill={draft.siteDetails} identity={identity} today={today} onClose={closeSite} onCreated={siteCreated}/>}
+      {textEditor !== null && editingItem && <LineTextEditor item={editingItem} onClose={closeText} onApply={updated => {
+        setItem(textEditor, reviseQuoteLineText(editingItem, updated));
+        closeText();
+      }}/>}
       {rateEditor && <RateEditor key={rateEditor.id} rate={rateEditor} existing={rates.some(rate => rate.id === rateEditor.id)} onClose={closeRate}
         onSave={saveRate} onRemove={removeRate}/>}
     </div>
     {draft && ready && draftSite && <PrintQuote draft={draft} site={draftSite} org={identity.org.name} lines={lines} total={total}/>}
   </>;
+}
+
+function LineTextEditor({ item, onClose, onApply }: { item: DraftItem; onClose: () => void; onApply: (value: QuoteLineText) => void }) {
+  const [error, setError] = useState('');
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = quoteLineTextSchema.safeParse(Object.fromEntries(new FormData(event.currentTarget)));
+    if (!text.success) {
+      setError('Inserisci un titolo per la voce e controlla la lunghezza dei testi.');
+      return;
+    }
+    onApply(text.data);
+  }
+  return <Drawer title={`Modifica voce ${item.reference}`} onClose={onClose}>
+    <form className="editor-form" onSubmit={submit}>
+      <fieldset className="form-grid drawer-fields">
+        <label>Titolo voce<input name="title" autoFocus required maxLength={quoteLineTextLimits.title}
+          defaultValue={item.title.slice(0, quoteLineTextLimits.title)}/></label>
+        <label>Descrizione voce<textarea name="description" rows={8} maxLength={quoteLineTextLimits.description}
+          defaultValue={item.description.slice(0, quoteLineTextLimits.description)}/></label>
+        <p className={styles.rateHint}>Il preventivo usa questi testi. Il listino continua a basarsi sulla voce originale.</p>
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </fieldset>
+      <footer className="drawer-footer">
+        <button type="button" className="button secondary" onClick={onClose}>Annulla</button>
+        <button type="submit" className="button primary">Applica modifiche</button>
+      </footer>
+    </form>
+  </Drawer>;
 }
 
 function RateEditor({ rate, existing, onSave, onRemove, onClose }: {
@@ -449,7 +496,7 @@ function PrintQuote({ draft, site, org, lines, total }: { draft: Draft; site: Si
       <small>Computo di partenza {draft.fileName}</small></header>
     <table><thead><tr><th>Voce</th><th>Descrizione</th><th>U.M.</th><th>Quantità</th><th>Prezzo</th><th>Importo</th></tr></thead>
       <tbody>{lines.map((line, index) => <tr key={index}><td>{line.reference}{line.code && <small>{line.code}</small>}</td>
-        <td><b>{line.title}</b>{line.description !== line.title && <small>{line.description}</small>}</td><td>{line.unit}</td>
+        <td><b>{line.title}</b>{line.description && line.description !== line.title && <small className={styles.printDescription}>{line.description}</small>}</td><td>{line.unit}</td>
         <td>{line.quantity.replace('.', ',')}</td><td>{euroOrDash(line.price)}</td><td>{formatEuro(quoteTotal(line)!)}</td></tr>)}</tbody></table>
     <p className={styles.printTotal}><b>Totale lavori {formatEuro(total)}</b> · IVA esclusa</p>
   </section>;

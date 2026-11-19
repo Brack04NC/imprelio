@@ -19,10 +19,19 @@ export const rateSchema = z.object({
 }).refine(rule => Boolean(rule.code || normalizePhrase(rule.phrase)), { message: 'Inserisci un codice o una parola da cercare nella voce.' })
   .refine(rule => (rule.kind === 'rental') === (rule.months !== null), { message: 'Indica la durata per il prezzo con noleggio incluso.' });
 
-export const quoteLineSchema = z.object({
-  reference: text(40), code: text(80), title: text(300).min(1), description: text(4000), page: z.number().int().min(1).max(100),
+export const quoteLineTextLimits = { title: 300, description: 4000 } as const;
+export const quoteLineTextSchema = z.object({
+  title: text(quoteLineTextLimits.title).min(1),
+  description: text(quoteLineTextLimits.description),
+});
+export type QuoteLineText = z.infer<typeof quoteLineTextSchema>;
+
+export const quoteLineSchema = quoteLineTextSchema.extend({
+  reference: text(40), code: text(80), page: z.number().int().min(1).max(100),
   unit: text(40).min(1).transform(normalizeUnit), quantity: amount(3, true), price: amount(2),
   sourcePrice: z.union([z.literal(''), amount(3)]), sourceTotal: z.union([z.literal(''), amount(3)]),
+  sourceTitle: quoteLineTextSchema.shape.title.optional(),
+  sourceDescription: quoteLineTextSchema.shape.description.optional(),
 });
 
 export const quoteSchema = z.object({
@@ -34,6 +43,18 @@ export type QuoteInput = z.infer<typeof quoteSchema>;
 export type QuoteLine = z.infer<typeof quoteLineSchema>;
 export type EstimateQuote = QuoteInput & { created_at: string };
 export type QuoteSummary = Omit<EstimateQuote, 'lines'>;
+
+type SourceText = Pick<QuoteLine, 'sourceTitle' | 'sourceDescription'>;
+
+export function reviseQuoteLineText(item: QuoteLineText & SourceText, updated: QuoteLineText): QuoteLineText & SourceText {
+  const originalTitle = item.sourceTitle ?? item.title;
+  const originalDescription = item.sourceDescription ?? item.description;
+  return {
+    ...updated,
+    sourceTitle: updated.title === originalTitle ? undefined : originalTitle,
+    sourceDescription: updated.description === originalDescription ? undefined : originalDescription,
+  };
+}
 
 export const pricingAction = z.union([
   z.object({ action: z.literal('save_rate'), rate: rateSchema }),
@@ -51,11 +72,11 @@ function normalizeCode(value: string) {
 }
 
 type Billing = { kind: PriceKind | 'unknown'; months: number | null };
-export function itemBilling(item: Pick<ImportedItem, 'title' | 'description' | 'unit'>): Billing {
+export function itemBilling(item: Pick<ImportedItem, 'title' | 'description' | 'unit'> & SourceText): Billing {
   const extra = /\b(?:mes[ei]\s+(?:successiv\w*|aggiuntiv\w*|ulterior\w*)|(?:successiv\w*|aggiuntiv\w*|ulterior\w*)\s+mes[ei])\b/;
-  const title = normalizePhrase(item.title);
+  const title = normalizePhrase(item.sourceTitle ?? item.title);
   if (extra.test(title) || normalizeUnit(item.unit) === 'm²/mese') return { kind: 'extension', months: null };
-  const description = normalizePhrase(item.description);
+  const description = normalizePhrase(item.sourceDescription ?? item.description);
   const mentionsRent = /\b(?:nol[eo]\w*|affitt\w*|canone)\b/.test(description);
   if (/\b(?:da|tra|fra) \d+ (?:a|e) \d+ mes[ei]\b|\b(?:piu|meno) di (?:un|\d+) mes[ei]\b/.test(description) ||
       /\b(?:senza|esclus\w+) (?:il )?(?:nol[eo]\w*|affitt\w*)\b|\b(?:nol[eo]\w*|affitt\w*) (?:\w+ ){0,3}(?:esclus\w+|a parte|non inclus\w+)\b/.test(description)) return { kind: 'unknown', months: null };
@@ -95,9 +116,9 @@ export function duplicateEstimateCodes(items: ImportedItem[]) {
   return duplicates;
 }
 
-export function matchEstimateRate(item: ImportedItem, rules: EstimateRate[], duplicateCodes = new Set<string>()) {
+export function matchEstimateRate(item: ImportedItem & SourceText, rules: EstimateRate[], duplicateCodes = new Set<string>()) {
   const unit = normalizeUnit(item.unit);
-  const title = ' ' + normalizePhrase(item.title) + ' ';
+  const title = ' ' + normalizePhrase(item.sourceTitle ?? item.title) + ' ';
   const code = normalizeCode(item.code);
   const billing = itemBilling(item);
   if (!unit || billing.kind === 'unknown') return { rate: null, reason: !unit ? 'Unità da verificare' : 'Durata da verificare' };
