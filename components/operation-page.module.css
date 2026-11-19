@@ -4,12 +4,27 @@
 .headingIcon { width: 55px; height: 55px; }
 .heading h1 { font-size: clamp(26px, 4vw, 39px); letter-spacing: -.05em; }
 .heading p, .listHeading p { color: var(--muted); margin-top: 5px; line-height: 1.45; }
+.pdfFeature {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px;
+  margin: 0 0 22px; padding: clamp(16px, 3vw, 28px); border-radius: 16px;
+  background: linear-gradient(110deg, var(--nav), #223d7b); color: #fff;
+}
+.pdfFeatureIntro { display: flex; align-items: center; gap: 14px; flex: 1 1 300px; min-width: 0; }
+.pdfFeatureIcon {
+  display: grid; place-items: center; flex: none; width: 52px; height: 52px; border-radius: 12px;
+  background: #ffffff18; color: #d6e6ff;
+}
+.pdfFeature h2 { font-size: clamp(22px, 3vw, 31px); letter-spacing: -.035em; }
+.pdfFeature p { margin-top: 5px; color: #dbe5fa; line-height: 1.5; }
+.pdfFeatureAction { color: var(--nav); }
+.pdfFeatureAction:hover { background: #eaf0ff; }
 .tabs { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
 .tabs button { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--muted); font-weight: 650; }
 .tabs button[aria-pressed=true] { color: var(--brand); background: #e8efff; border-color: #c3d1f5; }
 .list { padding: 20px; border-radius: 16px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
 .listHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
 .listHeading h2 { letter-spacing: -.035em; font-size: 22px; }
+.listActions { display: flex; flex-wrap: wrap; gap: 6px; }
 .filters { display: grid; grid-template-columns: minmax(140px,1.5fr) repeat(2, minmax(130px,1fr)); gap: 12px; margin-bottom: 18px; }
 .filters label { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-weight: 630; font-size: 12px; }
 .filters select, .searchInput { min-height: 44px; border: 1px solid #d6dfed; border-radius: 8px; background: #fff; color: var(--ink); width: 100%; }
@@ -57,6 +72,10 @@
 @media (max-width: 680px) {
   .heading { align-items: flex-start; flex-direction: column; margin-bottom: 16px; }
   .headingIcon { width: 44px; height: 44px; }
+  .pdfFeature { margin-bottom: 16px; }
+  .pdfFeatureIntro { align-items: flex-start; }
+  .pdfFeatureIcon { width: 42px; height: 42px; }
+  .pdfFeatureIcon svg { width: 22px; height: 22px; }
   .list { padding: 13px; }
   .listHeading { flex-wrap: wrap; }
   .filters { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }

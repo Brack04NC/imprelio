@@ -135,11 +135,25 @@ export function OperationPage({ identity, area, today, initial, sites, requested
         {(area === 'magazzino' || area === 'personale') && <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli', identity)}>
           <Truck size={18}/> Assegnazioni veicoli
         </Link>}
-        {kind === 'estimate' && <Link className="button secondary" href={orgLink('/gestione/preventivi-computo'
-          + (selectedSite ? '?cantiere=' + selectedSite.id : ''), identity)}><FileUp size={18}/> Preventivo da PDF</Link>}
-        <button className="button primary" onClick={() => openView('create')}><Plus size={19}/> Aggiungi {definition.singular.toLocaleLowerCase('it')}</button>
+        {kind !== 'estimate' && <button className="button primary" onClick={() => openView('create')}>
+          <Plus size={19}/> Aggiungi {definition.singular.toLocaleLowerCase('it')}
+        </button>}
       </div>
     </header>
+
+    {kind === 'estimate' && <section className={styles.pdfFeature} aria-labelledby="pdf-feature-heading">
+      <div className={styles.pdfFeatureIntro}>
+        <span className={styles.pdfFeatureIcon}><FileUp size={27} aria-hidden="true"/></span>
+        <div>
+          <h2 id="pdf-feature-heading">Preventivi da PDF</h2>
+          <p>Importa un computo, applica il listino aziendale e prepara il preventivo per il cantiere.</p>
+        </div>
+      </div>
+      <Link className={`button ${styles.pdfFeatureAction}`} href={orgLink('/gestione/preventivi-computo'
+        + (selectedSite ? '?cantiere=' + selectedSite.id : ''), identity)}>
+        Apri Preventivi da PDF <ArrowUpRight size={17}/>
+      </Link>
+    </section>}
 
     {kinds.length > 1 && <div className={styles.tabs} role="group" aria-label="Tipo di scheda">
       {kinds.map(value => {
@@ -152,8 +166,13 @@ export function OperationPage({ identity, area, today, initial, sites, requested
     <section className={styles.list} aria-labelledby="operation-list-heading">
       <div className={styles.listHeading}><div><h2 id="operation-list-heading">{kind === 'estimate' ? 'Elenco computi' : definition.plural}</h2>
         {kind !== 'estimate' && <p>{definition.description}</p>}</div>
-        <button className="button secondary" aria-pressed={archive} onClick={() => { setArchive(!archive); setPage(1); setNotice(undefined); }}>
-          <Archive size={17}/>{archive ? `Attive (${active})` : `Archiviate (${archived})`}</button>
+        <div className={styles.listActions}>
+          {kind === 'estimate' && <button className="button primary" onClick={() => openView('create')}>
+            <Plus size={18}/> Aggiungi computo metrico
+          </button>}
+          <button className="button secondary" aria-pressed={archive} onClick={() => { setArchive(!archive); setPage(1); setNotice(undefined); }}>
+            <Archive size={17}/>{archive ? `Attive (${active})` : `Archiviate (${archived})`}</button>
+        </div>
       </div>
       <div className={styles.filters}>
         <label><span>Cerca</span><span className={styles.searchInput}><Search size={17}/><input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Cerca nelle schede"/></span></label>

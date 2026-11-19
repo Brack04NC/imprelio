@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, CalendarDays, Calculator, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, FileText, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
+import { Building2, CalendarDays, Calculator, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
-import { areas, type OperationArea } from '@/lib/operation-types';
+import { areas } from '@/lib/operation-types';
 
 const modules = [
   { section: 'clienti', label: 'Clienti', href: '/clienti', icon: Building2 },
@@ -13,7 +13,9 @@ const modules = [
   { section: 'personale', label: areas.personale.title, href: '/gestione/personale', icon: Users },
   { section: 'amministrazione', label: areas.amministrazione.title, href: '/gestione/amministrazione', icon: FileText },
   { section: 'computi-metrici', label: areas['computi-metrici'].title, href: '/gestione/computi-metrici', icon: Calculator },
+  { section: 'preventivi-computo', label: 'Preventivi da PDF', href: '/gestione/preventivi-computo', icon: FileUp },
 ] as const;
+type ShellSection = 'cantieri' | 'agenda' | 'accessi' | typeof modules[number]['section'];
 
 export function orgLink(path: string, identity: Identity) {
   if (identity.orgs.length < 2) return path;
@@ -21,7 +23,7 @@ export function orgLink(path: string, identity: Identity) {
 }
 
 export function Shell({ identity, section, detail, onSearch, children }: {
-  identity: Identity; section: 'cantieri' | 'agenda' | 'accessi' | 'clienti' | OperationArea; detail?: string;
+  identity: Identity; section: ShellSection; detail?: string;
   onSearch?: () => void; children: ReactNode;
 }) {
   const mobile = useRef<HTMLDialogElement>(null);

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, HardHat, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 import { Drawer, type SitePrefill } from './editor';
 import { SiteFromEstimate } from './site-from-estimate';
@@ -84,6 +84,8 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const focusBack = useRef<HTMLElement | null>(null);
+  const draftHeading = useRef<HTMLHeadingElement>(null);
+  const draftId = draft?.id;
   const stableSite = availableSites.find(site => site.id === requestedSite)?.id ?? '';
   const draftSite = availableSites.find(site => site.id === draft?.site);
   const listino = useMemo(() => [...rates].sort((a, b) => a.label.localeCompare(b.label, 'it')), [rates]);
@@ -104,6 +106,10 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [identity.demo, requestedSite, today]);
+
+  useEffect(() => {
+    if (draftId) draftHeading.current?.focus();
+  }, [draftId]);
 
   const review = useMemo(() => {
     const items = draft?.items ?? [];
@@ -276,15 +282,13 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       <Link className="button text-button back-link" href={orgLink('/gestione/computi-metrici' + (stableSite ? '?cantiere=' + stableSite : ''), identity)}>
         <ArrowLeft size={16}/> Computi metrici
       </Link>
-      <header className="page-header"><div><h1>Preventivi da computo</h1>
-        <p>Importa il PDF, applica il tuo listino e verifica le voci prima di salvare.</p></div>
-        <label className={`button primary ${styles.upload}`}><FileUp size={18}/> Importa PDF
-          <input aria-label="Importa PDF" type="file" accept=".pdf,application/pdf" disabled={busy} onChange={event => {
-            const file = event.target.files?.[0];
-            if (file) void loadPdf(file);
-            event.target.value = '';
-          }}/></label>
-      </header>
+      <header className="page-header"><div><h1>Preventivi da PDF</h1>
+        <p>Applica il tuo listino al computo e verifica le voci prima di salvare.</p></div></header>
+      <PdfImportPanel busy={busy} replacing={Boolean(draft)} onFile={file => void loadPdf(file)} onError={setError}/>
+      {!draft && identity.demo && <button className={`button text-button ${styles.example}`} disabled={busy} onClick={() => {
+        setDraft(makeDraft([demonstration], 'Esempio ponteggio.pdf', stableSite || availableSites[0]?.id || ''));
+        setPage(1); setDraftFilter('all'); setError('');
+      }}>Prova l’esempio da 1.900 m²</button>}
       {progress && <p role="status" className={styles.notice}>{progress}</p>}
       {notice && <p role="status" className={styles.notice}>{notice}</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
@@ -308,15 +312,8 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
           <button className="button secondary" disabled={savedPage * rowsPerPage >= quotes.length} onClick={() => setSavedPage(savedPage + 1)}>Successivi</button>
         </div>}
       </details>}
-      {!draft ? <section className={`empty panel ${styles.empty}`}>
-        <FileUp size={30}/><strong>Carica il computo del cantiere</strong>
-        <p>Usa un PDF con testo selezionabile. Il documento viene letto nel browser.</p>
-        {identity.demo && <button className="button secondary" onClick={() => {
-          setDraft(makeDraft([demonstration], 'Esempio ponteggio.pdf', stableSite || availableSites[0]?.id || ''));
-          setPage(1); setDraftFilter('all'); setError('');
-        }}>Prova l’esempio da 1.900 m²</button>}
-      </section> : <section className={`panel ${styles.work}`} aria-labelledby="draft-heading">
-        <div className={styles.workHead}><div><h2 id="draft-heading">{draft.importIssue ? 'Dati del cantiere' : 'Revisione del preventivo'}</h2>
+      {draft && <section className={`panel ${styles.work}`} aria-labelledby="draft-heading">
+        <div className={styles.workHead}><div><h2 id="draft-heading" tabIndex={-1} ref={draftHeading}>{draft.importIssue ? 'Dati del cantiere' : 'Revisione del preventivo'}</h2>
           <p>{draft.fileName}{!draft.importIssue && ` · ${review.length} ${review.length === 1 ? 'voce importata' : 'voci importate'}`}</p>
           {!draft.importIssue && rates.length > 0 && <p role="status">{appliedRates} {appliedRates === 1 ? 'prezzo da listino applicato' : 'prezzi da listino applicati'}</p>}
         </div>
@@ -418,6 +415,61 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
     </div>
     {draft && ready && draftSite && <PrintQuote draft={draft} site={draftSite} org={identity.org.name} lines={lines} total={total}/>}
   </>;
+}
+
+function PdfImportPanel({ busy, replacing, onFile, onError }: {
+  busy: boolean; replacing: boolean; onFile: (file: File) => void; onError: (message: string) => void;
+}) {
+  const titleId = useId();
+  const hintsId = useId();
+  const fileDragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
+
+  function drop(event: DragEvent<HTMLElement>) {
+    const files = event.dataTransfer.files;
+    if (!files.length) return;
+    event.preventDefault();
+    fileDragDepth.current = 0;
+    setDragging(false);
+    if (busy) return;
+    if (files.length > 1) {
+      onError('Importa un PDF alla volta.');
+      return;
+    }
+    onFile(files[0]);
+  }
+
+  return <section className={styles.dropZone} aria-labelledby={titleId} data-dragging={dragging && !busy}
+    onDragEnter={event => {
+      if (!event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      fileDragDepth.current += 1;
+      setDragging(true);
+    }}
+    onDragOver={event => {
+      if (!event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = busy ? 'none' : 'copy';
+    }}
+    onDragLeave={() => {
+      fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+      if (fileDragDepth.current === 0) setDragging(false);
+    }}
+    onDrop={drop}>
+    <div className={styles.dropContent}>
+      <span className={styles.dropIcon}><FileUp size={25} aria-hidden="true"/></span>
+      <div>
+        <h2 id={titleId}>{replacing ? 'Importa un altro computo PDF' : 'Trascina qui il computo PDF'}</h2>
+        <p id={hintsId}>PDF con testo selezionabile, fino a 25 MB. Il file viene letto nel browser.</p>
+      </div>
+    </div>
+    <label className={`button primary ${styles.upload}`}>Importa PDF
+      <input aria-label="Importa PDF" aria-describedby={hintsId} type="file" accept=".pdf,application/pdf" disabled={busy} onChange={event => {
+        const file = event.target.files?.[0];
+        if (file) onFile(file);
+        event.target.value = '';
+      }}/></label>
+  </section>;
 }
 
 function LineTextEditor({ item, onClose, onApply }: { item: DraftItem; onClose: () => void; onApply: (value: QuoteLineText) => void }) {
