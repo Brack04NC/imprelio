@@ -151,9 +151,16 @@ kbd { font: inherit; font-size: 11px; border: 1px solid #e0e6f0; background: #ff
 .agenda-panel .panel-header { padding-bottom: 15px; }
 .agenda-heading-icon { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 9px; background: #eef2fc; color: #3554a0; }
 .period-control { display: grid; grid-template-columns: .68fr 1.23fr 1fr; align-items: center; padding: 3px; margin: 0 15px 8px; background: #eff2f8; border-radius: 9px; }
-.period-control button { min-height: 44px; padding: 0 3px; background: transparent; font-size: 11px; font-weight: 630; color: #52627d; border: 1px solid transparent; border-radius: 7px; white-space: nowrap; }
-.period-control button:hover { background: #e4ebf8; }
-.period-control button[aria-pressed=true] { background: white; color: #25449d; border-color: #e0e6f0; box-shadow: 0 1px 3px #293d6510; }
+.period-control button, .period-control a { min-height: 44px; padding: 0 3px; background: transparent; font-size: 11px; font-weight: 630; color: #52627d; border: 1px solid transparent; border-radius: 7px; white-space: nowrap; }
+.period-control :is(button, a):hover { background: #e4ebf8; }
+.period-control button[aria-pressed=true], .period-control a[aria-current=page] { background: white; color: #25449d; border-color: #e0e6f0; box-shadow: 0 1px 3px #293d6510; }
+.agenda-tools { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 0 16px 10px; }
+.agenda-tools .period-control { flex: 0 1 340px; margin: 0; }
+.agenda-tools .period-control a { display: grid; place-items: center; padding-inline: 7px; }
+.agenda-date-form { display: flex; align-items: end; gap: 8px; }
+.agenda-date-form label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.agenda-date-form input { min-height: 44px; min-width: 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: white; color: var(--ink); font-size: 16px; }
+.agenda-page-header { flex-wrap: wrap; }
 .agenda-items, .detail-jobs, .access-list { padding: 0; margin: 0; list-style: none; }
 .agenda-items { padding: 0 16px; }
 .agenda-items li + li { border-top: 1px solid #e9edf3; }

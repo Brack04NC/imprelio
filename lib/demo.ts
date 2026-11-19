@@ -1,5 +1,6 @@
 import { compareJobs, PAGE_SIZE, plusDays } from './domain.ts';
 import type { Access, Action, Client, Identity, Job, Row, Site, Workspace, WorkspaceInput } from './domain.ts';
+import { inAgenda, type agendaRange } from './agenda.ts';
 
 const key = (n: number) => '74b7f7a0-27a7-4cad-a670-' + String(n).padStart(12, '0');
 const org = { id: key(1), name: 'Impresa Bellini', role: 'admin' as const };
@@ -35,6 +36,15 @@ export function demoSeed(today: string): Demo {
     { user_id: key(2), email: demoIdentity.email, role: 'admin', active: true },
     { user_id: key(3), email: 'luca@example.test', role: 'coordinator', active: true },
   ], invitations: [] } };
+}
+
+export function demoAgenda(store: Demo, range: ReturnType<typeof agendaRange>) {
+  const sites = new Map(store.sites.map(site => [site.id, site]));
+  const items = store.jobs.filter(job => inAgenda(job, range)).sort(compareJobs).flatMap(job => {
+    const site = sites.get(job.site_id);
+    return site ? [{ ...job, site: { id: site.id, name: site.name, city: site.city } }] : [];
+  });
+  return { items, sites: store.sites.map(({ id, name, city }) => ({ id, name, city })) };
 }
 
 export function demoWorkspace(store: Demo, input: WorkspaceInput, today: string): Workspace {

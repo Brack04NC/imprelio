@@ -20,16 +20,17 @@ export function orgLink(path: string, identity: Identity) {
   return path + (path.includes('?') ? '&' : '?') + 'azienda=' + identity.org.id;
 }
 
-export function Shell({ identity, section, detail, onSearch, onAgenda, children }: {
-  identity: Identity; section: 'cantieri' | 'accessi' | 'clienti' | OperationArea; detail?: string;
-  onSearch?: () => void; onAgenda?: () => void; children: ReactNode;
+export function Shell({ identity, section, detail, onSearch, children }: {
+  identity: Identity; section: 'cantieri' | 'agenda' | 'accessi' | 'clienti' | OperationArea; detail?: string;
+  onSearch?: () => void; children: ReactNode;
 }) {
   const mobile = useRef<HTMLDialogElement>(null);
   const initials = identity.name.split(/[ ._-]+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'IM';
   const overview = orgLink('/cantieri', identity);
-  const agenda = orgLink('/cantieri?vista=agenda', identity);
+  const agenda = orgLink('/agenda', identity);
   const access = orgLink('/accessi', identity);
-  const sectionLabel = section === 'cantieri' ? 'Cantieri' : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
+  const sectionLabel = section === 'cantieri' ? 'Cantieri' : section === 'agenda' ? 'Agenda'
+    : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
   function sidebar() {
     return <>
       <Link href={overview} className="brand" onClick={() => mobile.current?.close()}>
@@ -39,10 +40,8 @@ export function Shell({ identity, section, detail, onSearch, onAgenda, children 
       <div className="nav-main">
         <p className="nav-label">OPERATIVITÀ</p>
         <Link href={overview} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
-        <Link href={agenda} className="nav-link" onClick={event => {
-          mobile.current?.close();
-          if (onAgenda && !event.metaKey && !event.ctrlKey && !event.shiftKey) { event.preventDefault(); onAgenda(); }
-        }}><CalendarDays size={18} /> Agenda</Link>
+        <Link href={agenda} onClick={() => mobile.current?.close()} aria-current={section === 'agenda' ? 'page' : undefined}
+          className={'nav-link ' + (section === 'agenda' ? 'nav-active' : '')}><CalendarDays size={18} /> Agenda</Link>
         {identity.org.role === 'admin' && <Link href={access} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
         <p className="nav-label roadmap-label">GESTIONE</p>
         {modules.map(({ section: page, label, href, icon: Icon }) => <Link key={page} href={orgLink(href, identity)}

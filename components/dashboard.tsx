@@ -3,20 +3,20 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Building2, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, ClipboardList, Clock3, HardHat, MapPin, Pencil, Plus, Search, SlidersHorizontal, UserRound, X, Check, Layers3, MoveUpRight, Wrench, ScanSearch } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Building2, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Clock3, HardHat, MapPin, Pencil, Plus, Search, SlidersHorizontal, UserRound, X, Check } from 'lucide-react';
 import { demoKey, demoWorkspace, getDemo, updateDemo } from '@/lib/demo';
-import { formatDate, jobLabels, kindLabels, PAGE_SIZE, parseWorkspaceParams, siteLabels, siteStates, type Action, type AgendaItem, type Identity, type Job, type Row, type Site, type Workspace } from '@/lib/domain';
+import { formatDate, jobLabels, kindLabels, PAGE_SIZE, parseWorkspaceParams, siteLabels, siteStates, type Action, type Identity, type Job, type Row, type Site, type Workspace } from '@/lib/domain';
 import { requestWorkspace } from '@/lib/client-api';
 import { Shell, orgLink } from './shell';
 import { Editor } from './editor';
 import { OperationLinks } from './operation-links';
+import { AgendaRow, jobIcons } from './agenda-row';
 
 type EditorState = { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
 type AgendaPeriod = 'today' | 'week' | 'overdue';
 
 const periodLabels: Record<AgendaPeriod, string> = { today: 'Oggi', week: 'Prossimi 7 gg', overdue: 'In ritardo' };
 const emptyPeriod: Record<AgendaPeriod, string> = { today: 'Nessun intervento oggi.', week: 'Nessun intervento nei prossimi 7 giorni.', overdue: 'Nessun intervento in ritardo.' };
-const jobIcons = { survey: ScanSearch, assembly: Layers3, adjustment: Wrench, dismantling: HardHat, other: ClipboardList };
 
 function Badge({ label, tone }: { label: string; tone: string }) {
   return <span className={`badge badge-${tone}`}><i aria-hidden="true"/>{label}</span>;
@@ -222,7 +222,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   }
   const showingSites = search.get('vista') === 'elenco';
 
-  return <Shell identity={identity} section="cantieri" detail={current?.site.name} onSearch={focusSearch} onAgenda={() => setView('agenda', 'agenda')}>
+  return <Shell identity={identity} section="cantieri" detail={current?.site.name} onSearch={focusSearch}>
     {readError && <div className="load-error" role="alert">{readError}<button className="button secondary" onClick={() => setRevision(value => value + 1)}>Riprova</button></div>}
     {filters.siteId ? current ? <>
       <SiteAnchor className="button text-button back-link" href={overview + (params ? '?' + params : '')} onOpen={href => { window.history.pushState(null, '', href); }}><ArrowLeft size={17}/> Tutti i cantieri</SiteAnchor>
@@ -309,11 +309,13 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
           </footer>
         </section>
         <section className="panel agenda-panel" ref={agenda} tabIndex={-1} aria-labelledby="agenda-title">
-          <header className="panel-header"><div><h2 id="agenda-title">Agenda</h2><p>{formatDate(today, { weekday: 'long', day: 'numeric', month: 'long' })}</p></div><span className="agenda-heading-icon"><CalendarDays size={20}/></span></header>
+          <header className="panel-header"><div><h2 id="agenda-title">Agenda</h2><p>{formatDate(today, { weekday: 'long', day: 'numeric', month: 'long' })}</p></div>
+            <Link className="button text-button" href={orgLink('/agenda', identity)}>Apri agenda <ArrowRight size={16}/></Link>
+          </header>
           <div className="period-control" role="group" aria-label="Periodo dell’agenda">
             {(Object.keys(periodLabels) as AgendaPeriod[]).map(key => <button key={key} aria-pressed={period === key} onClick={() => window.history.pushState(null, '', makeUrl(overview, { periodo: key === 'today' ? null : key === 'overdue' ? 'ritardo' : 'settimana' }))}>{periodLabels[key]}</button>)}
           </div>
-          {agendaItems.length ? <ul className="agenda-items">{agendaItems.map(job => <AgendaRow key={job.id} job={job} period={period} edit={() => openEditor({ type: 'job', site: job.site, job })} />)}</ul>
+          {agendaItems.length ? <ul className="agenda-items">{agendaItems.map(job => <AgendaRow key={job.id} job={job} showDate={period !== 'today'} edit={() => openEditor({ type: 'job', site: job.site, job })} />)}</ul>
             : <div className="empty agenda-empty"><CalendarCheck size={25}/><p>{emptyPeriod[period]}</p></div>}
           {agendaItems.length > 0 && <div className="agenda-footer"><Clock3 size={15}/>{agendaItems.length} {agendaItems.length === 1 ? 'intervento' : 'interventi'}</div>}
         </section>
@@ -333,19 +335,4 @@ function SiteRow({ row, href, openSite, today }: { row: Row; href: string; openS
     <td className="row-date">{row.nextJob ? (row.nextJob.due_date === today ? 'Oggi' : <DateLabel date={row.nextJob.due_date}/>) : '—'}</td>
     <td className="row-end"><span aria-hidden="true"><ChevronRight size={17}/></span></td>
   </tr>;
-}
-
-function AgendaRow({ job, period, edit }: { job: AgendaItem; period: AgendaPeriod; edit: () => void }) {
-  const Icon = jobIcons[job.kind];
-  return <li><button className="agenda-row" onClick={edit}>
-    <span className={`job-icon job-${job.kind}`}><Icon size={18}/></span>
-    <span className="agenda-row-content"><strong>{kindLabels[job.kind]}</strong>
-      <span>{job.site.name}{job.zone ? ' · ' + job.zone : ''}</span>
-      <span className="agenda-when">{period !== 'today' && <DateLabel date={job.due_date}/>}
-        {job.time && <><Clock3 size={13}/>{job.time.slice(0, 5)}</>}
-        {period === 'today' && !job.time && 'Ora da definire'}
-        {(job.status === 'done' || job.status === 'progress') && <span className={job.status === 'done' ? 'agenda-done' : 'agenda-progress'}>{jobLabels[job.status]}</span>}
-      </span>
-    </span><MoveUpRight className="agenda-arrow" size={16}/>
-  </button></li>;
 }

@@ -20,11 +20,13 @@ export function Drawer({ title, children, onClose, busy = false }: {
 }
 
 type EditorProps = {
-  editor: { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
+  editor: { type: 'site'; site?: Site; clientId?: string }
+    | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job }
+    | { type: 'job'; sites: Pick<Site, 'id' | 'name' | 'city'>[] };
   clients: Client[]; today: string; onClose: () => void; save: (action: Action) => Promise<void>;
 };
 export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
-  const job = editor.type === 'job' ? editor.job : undefined;
+  const job = editor.type === 'job' && 'site' in editor ? editor.job : undefined;
   const site = editor.type === 'site' ? editor.site : undefined;
   const [newClient, setNewClient] = useState(false);
   const [selectedClient, setSelectedClient] = useState(site?.client_id ?? (editor.type === 'site' ? editor.clientId ?? '' : ''));
@@ -41,7 +43,7 @@ export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
     stableId.current ||= crypto.randomUUID();
     const raw = editor.type === 'site'
       ? { ...form, action: 'site', id: stableId.current, client_id: newClient ? null : form.client_id || null, new_client: form.new_client || '' }
-      : { ...form, action: 'job', id: stableId.current, site_id: editor.site.id, time: form.time || null };
+      : { ...form, action: 'job', id: stableId.current, site_id: 'site' in editor ? editor.site.id : form.site_id, time: form.time || null };
     const result = actionSchema.safeParse(raw);
     if (!result.success) { setError('Controlla i dati inseriti e riprova.'); return; }
     inFlight.current = true;
@@ -67,8 +69,13 @@ export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
             <button type="button" className="button text-button" onClick={() => setNewClient(value => !value)}>{!newClient && <Plus size={16}/>} {newClient ? 'Scegli un cliente esistente' : 'Crea cliente'}</button>
           </div>
         </> : <>
-          <p className="editor-context">{editor.site.name}</p>
-          <label>Tipo di intervento <select autoFocus name="kind" defaultValue={job?.kind ?? 'assembly'}>{jobKinds.map(value => <option key={value} value={value}>{kindLabels[value]}</option>)}</select></label>
+          {'site' in editor ? <p className="editor-context">{editor.site.name}</p> : <label>Cantiere
+            <select autoFocus name="site_id" required defaultValue={editor.sites.length === 1 ? editor.sites[0].id : ''}>
+              <option value="">Seleziona cantiere</option>
+              {editor.sites.map(item => <option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}
+            </select>
+          </label>}
+          <label>Tipo di intervento <select autoFocus={'site' in editor} name="kind" defaultValue={job?.kind ?? 'assembly'}>{jobKinds.map(value => <option key={value} value={value}>{kindLabels[value]}</option>)}</select></label>
           <label>Zona <input name="zone" maxLength={120} defaultValue={job?.zone} placeholder="Es. Facciata nord"/></label>
           <div className="form-pair">
             <label>Data prevista <input name="due_date" type="date" required defaultValue={job?.due_date ?? today}/></label>
