@@ -26,9 +26,9 @@ type EditorProps = {
   editor: { type: 'site'; site?: Site; clientId?: string; prefill?: SitePrefill }
     | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job }
     | { type: 'job'; sites: Pick<Site, 'id' | 'name' | 'city'>[] };
-  clients: Client[]; today: string; onClose: () => void; save: (action: Action) => Promise<void>;
+  clients: Client[]; today: string; defaultTime?: string; onClose: () => void; save: (action: Action) => Promise<void>;
 };
-export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
+export function Editor({ editor, clients, today, defaultTime, onClose, save }: EditorProps) {
   const job = editor.type === 'job' && 'site' in editor ? editor.job : undefined;
   const site = editor.type === 'site' ? editor.site : undefined;
   const prefill = editor.type === 'site' ? editor.prefill : undefined;
@@ -86,7 +86,7 @@ export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
           <label>Zona <input name="zone" maxLength={120} defaultValue={job?.zone} placeholder="Es. Facciata nord"/></label>
           <div className="form-pair">
             <label>Data prevista <input name="due_date" type="date" required defaultValue={job?.due_date ?? today}/></label>
-            <label>Ora <input name="time" type="time" defaultValue={job?.time?.slice(0, 5) ?? ''}/></label>
+            <label>Ora <input name="time" type="time" defaultValue={job?.time?.slice(0, 5) ?? defaultTime ?? ''}/></label>
           </div>
           <label>Stato <select name="status" defaultValue={job?.status ?? 'scheduled'}>{jobStates.map(value => <option key={value} value={value}>{jobLabels[value]}</option>)}</select></label>
           <label>Note <textarea name="notes" rows={4} maxLength={2000} defaultValue={job?.notes} placeholder="Indicazioni per l’intervento"/></label>

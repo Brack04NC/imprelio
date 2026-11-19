@@ -1,12 +1,12 @@
 import 'server-only';
 import type { database } from './backend';
-import { agendaRange } from './agenda';
+import type { AgendaRange } from './agenda';
 import type { AgendaItem } from './domain';
 
 export async function readAgenda(
   db: Awaited<ReturnType<typeof database>>,
   org: string,
-  range: ReturnType<typeof agendaRange>,
+  range: AgendaRange,
 ) {
   const items: AgendaItem[] = [];
   const pageSize = 500;

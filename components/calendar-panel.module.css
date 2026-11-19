@@ -1,0 +1,15 @@
+.panel { min-width: 0; }
+.toolbar { display: flex; justify-content: space-between; gap: 12px 18px; align-items: center; flex-wrap: wrap; padding: 14px 16px; }
+.period { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.period h2 { font-size: clamp(17px, 2.4vw, 23px); line-height: 1.2; letter-spacing: -.025em; }
+.period h2::first-letter { text-transform: uppercase; }
+.controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.step { display: flex; align-items: center; gap: 4px; }
+.step :global(.icon-button) { color: var(--brand); }
+.views { display: flex; gap: 3px; margin: 0; }
+.views a { display: grid; place-items: center; padding-inline: 11px; }
+@media (max-width: 580px) {
+  .toolbar { padding: 12px; }
+  .controls { width: 100%; justify-content: space-between; }
+  .views a { padding-inline: 8px; }
+}

@@ -2,17 +2,20 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CalendarCheck, CalendarDays, Plus } from 'lucide-react';
+import { CalendarCheck, CalendarDays, List, Plus } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { agendaPeriods, agendaRange, inAgenda, type AgendaView } from '@/lib/agenda';
+import { calendarPath, calendarRange, type CalendarSelection } from '@/lib/calendar';
 import { requestWorkspace } from '@/lib/client-api';
 import { demoAgenda, demoKey, getDemo, updateDemo } from '@/lib/demo';
 import { formatDate, type Action, type AgendaItem, type Identity, type Site } from '@/lib/domain';
 import { AgendaRow } from './agenda-row';
+import { CalendarPanel } from './calendar-panel';
 import { Editor } from './editor';
 import { Shell, orgLink } from './shell';
 
 type SiteChoice = Pick<Site, 'id' | 'name' | 'city'>;
+type Editing = AgendaItem | { date: string; time?: string };
 
 const empty = {
   oggi: 'Nessun intervento oggi.',
@@ -21,18 +24,18 @@ const empty = {
   data: 'Nessun intervento per questa data.',
 };
 
-export function AgendaPage({ identity, today, view, items, sites }: {
-  identity: Identity; today: string; view: AgendaView; items: AgendaItem[]; sites: SiteChoice[];
+export function AgendaPage({ identity, today, view, calendar, items, sites }: {
+  identity: Identity; today: string; view: AgendaView; calendar: CalendarSelection | null; items: AgendaItem[]; sites: SiteChoice[];
 }) {
   const router = useRouter();
   const [demo, setDemo] = useState<ReturnType<typeof getDemo> | null>(null);
-  const [editing, setEditing] = useState<AgendaItem | 'new' | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [notice, setNotice] = useState('');
   const opener = useRef<HTMLElement | null>(null);
   const add = useRef<HTMLButtonElement>(null);
-  const range = agendaRange(view, today);
+  const range = calendar ? calendarRange(calendar) : agendaRange(view, today);
   const displayed = demo ? demoAgenda(demo, range) : { items, sites };
-  const selectedDay = view.period === 'data' ? view.date : today;
+  const selectedDay = calendar?.date ?? (view.period === 'data' ? view.date : today);
   const dayLabel = (day: string) => formatDate(day, { day: 'numeric', month: 'long', year: 'numeric' });
   const rangeLabel = view.period === 'settimana' && range.from
     ? `${dayLabel(range.from)} – ${dayLabel(range.to)}`
@@ -58,7 +61,7 @@ export function AgendaPage({ identity, today, view, items, sites }: {
     if (typeof date === 'string' && date) router.push(dateHref(date));
   }
 
-  function openEditor(job: AgendaItem | 'new') {
+  function openEditor(job: Editing) {
     opener.current = document.activeElement as HTMLElement;
     setNotice('');
     setEditing(job);
@@ -80,18 +83,29 @@ export function AgendaPage({ identity, today, view, items, sites }: {
     }
     closeEditor();
     setNotice('Intervento salvato.');
-    if (!inAgenda(action, range)) window.location.assign(dateHref(action.due_date));
+    if (!inAgenda(action, range)) window.location.assign(calendar
+      ? orgLink(calendarPath(calendar.view, action.due_date), identity) : dateHref(action.due_date));
     else if (!identity.demo) router.refresh();
   }
 
-  return <Shell identity={identity} section="agenda">
+  return <Shell identity={identity} section="agenda" detail={calendar ? 'Calendario' : undefined}>
     <header className="page-header agenda-page-header">
-      <div><h1>Agenda</h1><p>Programma e consulta gli interventi dei cantieri.</p></div>
-      {displayed.sites.length > 0 && <button ref={add} className="button primary" onClick={() => openEditor('new')}>
+      <div><h1>{calendar ? 'Calendario' : 'Agenda'}</h1><p>Programma e consulta gli interventi dei cantieri.</p></div>
+      {displayed.sites.length > 0 && <button ref={add} className="button primary" onClick={() => openEditor({ date: calendar?.date ?? range.from ?? today })}>
         <Plus size={18}/> Aggiungi intervento
       </button>}
     </header>
-    <section className="panel agenda-panel" aria-labelledby="agenda-period">
+    <nav className="agenda-mode" aria-label="Visualizzazione degli interventi">
+      <Link href={calendar && selectedDay !== today ? dateHref(selectedDay) : orgLink('/agenda', identity)}
+        className="button secondary" aria-current={calendar ? undefined : 'page'}><List size={17}/> Lista</Link>
+      <Link href={orgLink(calendarPath(calendar?.view ?? 'mese', selectedDay), identity)}
+        className="button secondary" aria-current={calendar ? 'page' : undefined}><CalendarDays size={17}/> Calendario</Link>
+    </nav>
+    {calendar ? <>
+      {displayed.sites.length === 0 && <Link className="button secondary agenda-create-site" href={orgLink('/cantieri?nuovo=1', identity)}>Crea un cantiere per iniziare</Link>}
+      <CalendarPanel selection={calendar} today={today} identity={identity} items={displayed.items} canCreate={displayed.sites.length > 0}
+        onEdit={openEditor} onCreate={(date, time) => openEditor({ date, time })}/>
+    </> : <section className="panel agenda-panel" aria-labelledby="agenda-period">
       <header className="panel-header">
         <div><h2 id="agenda-period">{view.period === 'data' ? 'Data selezionata' : agendaPeriods.find(item => item.id === view.period)?.label}</h2>
           <p>{rangeLabel}</p>
@@ -116,10 +130,11 @@ export function AgendaPage({ identity, today, view, items, sites }: {
         {displayed.sites.length === 0 && <Link className="button secondary" href={orgLink('/cantieri?nuovo=1', identity)}>Crea un cantiere per iniziare</Link>}
       </div>}
       {displayed.items.length > 0 && <footer className="agenda-footer">{displayed.items.length} {displayed.items.length === 1 ? 'intervento' : 'interventi'}</footer>}
-    </section>
+    </section>}
     {editing && <Editor
-      editor={editing === 'new' ? { type: 'job', sites: displayed.sites } : { type: 'job', site: editing.site, job: editing }}
-      today={range.from ?? today} clients={[]} onClose={closeEditor} save={save}/>}
+      editor={'site' in editing ? { type: 'job', site: editing.site, job: editing } : { type: 'job', sites: displayed.sites }}
+      today={'date' in editing ? editing.date : selectedDay} defaultTime={'date' in editing ? editing.time : undefined}
+      clients={[]} onClose={closeEditor} save={save}/>}
     {notice && <div className="toast" role="status">{notice}<button type="button" className="button text-button" onClick={() => setNotice('')}>Chiudi</button></div>}
   </Shell>;
 }

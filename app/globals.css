@@ -161,6 +161,9 @@ kbd { font: inherit; font-size: 11px; border: 1px solid #e0e6f0; background: #ff
 .agenda-date-form label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
 .agenda-date-form input { min-height: 44px; min-width: 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: white; color: var(--ink); font-size: 16px; }
 .agenda-page-header { flex-wrap: wrap; }
+.agenda-mode { display: flex; gap: 7px; margin-bottom: 13px; }
+.agenda-mode a[aria-current=page] { color: var(--brand); background: #eaf0ff; border-color: #aabeec; }
+.agenda-create-site { margin-bottom: 12px; }
 .agenda-items, .detail-jobs, .access-list { padding: 0; margin: 0; list-style: none; }
 .agenda-items { padding: 0 16px; }
 .agenda-items li + li { border-top: 1px solid #e9edf3; }
