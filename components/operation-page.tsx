@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Archive, ArrowLeft, ArrowUpRight, Boxes, Calculator, ClipboardList, FileText, FileUp, HardHat, Package, Pencil, Plus, RotateCcw, Search, Truck, Users, Warehouse, X } from 'lucide-react';
 import { Drawer } from './editor';
+import { SiteFromEstimate } from './site-from-estimate';
 import { Shell, orgLink } from './shell';
 import type { Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
@@ -190,7 +191,8 @@ export function OperationPage({ identity, area, today, initial, sites, requested
       </div>}
     </section>
     {editor && <OperationEditor definition={definition} record={editor === 'create' ? undefined : editor} today={today}
-      sites={availableSites} articles={articles} selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}/>}
+      identity={identity} sites={availableSites} articles={articles} selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}
+      onSiteCreated={site => setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)])}/>}
   </Shell>;
 }
 
@@ -214,8 +216,9 @@ function InputField({ field, value, change, articles = [] }: {
     placeholder={field.placeholder} onChange={event => change(event.target.value)}/></label>;
 }
 
-function OperationEditor({ definition, record, today, sites, articles, selectedSite, onClose, save }: {
+function OperationEditor({ definition, record, today, identity, sites, articles, selectedSite, onClose, save, onSiteCreated }: {
   definition: Definition; record?: OperationRecord; today: string; sites: SiteOption[]; articles: Option[];
+  identity: Identity; onSiteCreated: (site: SiteOption) => void;
   selectedSite: string; onClose: () => void; save: (action: OperationWrite) => Promise<void>;
 }) {
   const lineFields = definition.lineFields ?? [];
@@ -223,6 +226,9 @@ function OperationEditor({ definition, record, today, sites, articles, selectedS
   const [status, setStatus] = useState(record?.status ?? definition.defaultStatus);
   const [date, setDate] = useState(record?.record_date ?? (definition.dateRequired ? today : ''));
   const [site, setSite] = useState(record ? record.site_id ?? '' : selectedSite);
+  const [siteEditor, setSiteEditor] = useState(false);
+  const [siteNotice, setSiteNotice] = useState('');
+  const siteSelect = useRef<HTMLSelectElement>(null);
   const [fields, setFields] = useState(() => initialValues(definition.fields, record?.fields));
   const [lines, setLines] = useState(() => (record?.lines ?? (lineFields.length ? [{}] : []))
     .map((row, key) => ({ key, fields: initialValues(lineFields, row) })));
@@ -248,7 +254,13 @@ function OperationEditor({ definition, record, today, sites, articles, selectedS
   }
 
   const subject = definition.singular.toLocaleLowerCase('it');
-  return <Drawer title={readOnly ? record!.title : (record ? 'Modifica ' : 'Aggiungi ') + subject} onClose={onClose} busy={busy}>
+  const createSite = definition.kind === 'estimate' && !readOnly && !site;
+  function closeSiteEditor() {
+    setSiteEditor(false);
+    requestAnimationFrame(() => siteSelect.current?.focus());
+  }
+
+  return <><Drawer title={readOnly ? record!.title : (record ? 'Modifica ' : 'Aggiungi ') + subject} onClose={onClose} busy={busy}>
     <form className="editor-form" onSubmit={submit}>
       <div className="drawer-fields">
         <fieldset className={`form-grid ${styles.editorFields}`} disabled={busy || readOnly}>
@@ -258,9 +270,17 @@ function OperationEditor({ definition, record, today, sites, articles, selectedS
               {definition.statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             {definition.dateLabel && <label>{definition.dateLabel}<input type="date" required={definition.dateRequired} value={date} onChange={event => setDate(event.target.value)}/></label>}
           </div>
-          {definition.site !== 'none' && <label>Cantiere<select aria-label="Cantiere" required={definition.site === 'required'} value={site} onChange={event => setSite(event.target.value)}>
-            <option value="">{definition.site === 'required' ? 'Seleziona cantiere' : 'Nessun cantiere'}</option>
-            {sites.map(item => <option key={item.id} value={item.id}>{item.name} · {item.client || item.city}</option>)}</select></label>}
+          {definition.site !== 'none' && <div className="client-input">
+            <label>Cantiere<select ref={siteSelect} aria-label="Cantiere" required={definition.site === 'required'} value={site} onChange={event => {
+              setSite(event.target.value); setSiteNotice('');
+            }}>
+              <option value="">{definition.site === 'required' ? 'Seleziona cantiere' : 'Nessun cantiere'}</option>
+              {sites.map(item => <option key={item.id} value={item.id}>{item.name} · {item.client || item.city}</option>)}</select></label>
+            {createSite && <button type="button" className="button text-button" onClick={() => setSiteEditor(true)}>
+              <HardHat size={17}/> Crea cantiere dal computo
+            </button>}
+            {siteNotice && <p role="status" className={styles.notice}>{siteNotice}</p>}
+          </div>}
           {definition.fields.map(field => <InputField key={field.key} field={field} value={fields[field.key]}
             articles={articles} change={value => setFields(previous => ({ ...previous, [field.key]: value }))}/>)}
           {lineFields.length > 0 && <section className={styles.lines} aria-label="Righe">
@@ -290,5 +310,13 @@ function OperationEditor({ definition, record, today, sites, articles, selectedS
       <footer className="drawer-footer"><button type="button" disabled={busy} className="button secondary" onClick={onClose}>{readOnly ? 'Chiudi' : 'Annulla'}</button>
         {!readOnly && <button type="submit" className="button primary" disabled={busy}>{busy ? 'Salvataggio…' : 'Salva scheda'}</button>}</footer>
     </form>
-  </Drawer>;
+  </Drawer>
+    {siteEditor && <SiteFromEstimate prefill={{ name: title, city: '', address: '', clientName: '' }} identity={identity} today={today}
+      onClose={closeSiteEditor} onCreated={created => {
+        onSiteCreated(created);
+        setSite(created.id);
+        setSiteNotice('Cantiere creato e selezionato.');
+        closeSiteEditor();
+      }}/>}
+  </>;
 }

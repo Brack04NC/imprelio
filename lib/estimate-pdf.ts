@@ -1,5 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-import { estimateImportWarnings, readEstimatePages, type PdfPage } from './estimate-import';
+import { estimateHeaderText, estimateImportWarnings, readEstimatePages, type PdfPage } from './estimate-import';
+import { extractEstimateSite } from './estimate-site';
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
@@ -19,12 +20,18 @@ export async function extractEstimate(file: File, onPage: (page: number, total: 
       page.cleanup();
       onPage(number, document.numPages);
     }
+    const siteDetails = extractEstimateSite(estimateHeaderText(pages));
     const rows = readEstimatePages(pages);
-    if (!rows.length) throw new Error(pages.some(page => page.items.length > 0)
-      ? 'Non ho riconosciuto una tabella di computo in questo PDF.'
-      : 'Il PDF sembra una scansione. Usa una versione con testo selezionabile.');
-    if (rows.length > 350) throw new Error('Il computo supera 350 voci. Dividilo in più PDF per importarlo.');
-    return { items: rows, warnings: estimateImportWarnings(pages, rows) };
+    const importIssue = !rows.length
+      ? (pages.some(page => page.items.some(item => item.text.trim()))
+        ? 'Non ho riconosciuto una tabella di computo in questo PDF.'
+        : 'Il PDF sembra una scansione. Usa una versione con testo selezionabile.')
+      : rows.length > 350 ? 'Il computo supera 350 voci. Dividilo in più PDF per importare le lavorazioni.' : '';
+    if (importIssue) {
+      if (!Object.values(siteDetails).some(Boolean)) throw new Error(importIssue);
+      return { items: [], warnings: [], siteDetails, importIssue };
+    }
+    return { items: rows, warnings: estimateImportWarnings(pages, rows), siteDetails, importIssue };
   } finally {
     await task.destroy();
   }

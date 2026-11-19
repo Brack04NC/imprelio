@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import { actionSchema, jobKinds, jobLabels, jobStates, kindLabels, siteLabels, siteStates, type Action, type Client, type Job, type Site } from '@/lib/domain';
 
@@ -8,19 +8,22 @@ export function Drawer({ title, children, onClose, busy = false }: {
   title: string; children: ReactNode; onClose: () => void; busy?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => { dialog.current?.showModal(); }, []);
-  return <dialog className="drawer" ref={dialog} aria-labelledby="editor-title"
+  return <dialog className="drawer" ref={dialog} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
     onClick={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <div className="drawer-inner">
-      <header className="drawer-header"><h2 id="editor-title">{title}</h2><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Chiudi"><X size={22}/></button></header>
+      <header className="drawer-header"><h2 id={titleId}>{title}</h2><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Chiudi"><X size={22}/></button></header>
       {children}
     </div>
   </dialog>;
 }
 
+export type SitePrefill = Pick<Site, 'name' | 'city' | 'address'> & { clientName: string };
+
 type EditorProps = {
-  editor: { type: 'site'; site?: Site; clientId?: string }
+  editor: { type: 'site'; site?: Site; clientId?: string; prefill?: SitePrefill }
     | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job }
     | { type: 'job'; sites: Pick<Site, 'id' | 'name' | 'city'>[] };
   clients: Client[]; today: string; onClose: () => void; save: (action: Action) => Promise<void>;
@@ -28,13 +31,16 @@ type EditorProps = {
 export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
   const job = editor.type === 'job' && 'site' in editor ? editor.job : undefined;
   const site = editor.type === 'site' ? editor.site : undefined;
-  const [newClient, setNewClient] = useState(false);
-  const [selectedClient, setSelectedClient] = useState(site?.client_id ?? (editor.type === 'site' ? editor.clientId ?? '' : ''));
+  const prefill = editor.type === 'site' ? editor.prefill : undefined;
+  const clientName = prefill?.clientName.trim().slice(0, 140) ?? '';
+  const clientMatch = clientName ? clients.find(client => client.name.toLocaleLowerCase('it') === clientName.toLocaleLowerCase('it')) : undefined;
+  const [newClient, setNewClient] = useState(Boolean(prefill && !clientMatch && (clientName || !clients.length)));
+  const [selectedClient, setSelectedClient] = useState(site?.client_id ?? (editor.type === 'site' ? editor.clientId ?? clientMatch?.id ?? '' : ''));
   const stableId = useRef<string>(job?.id ?? site?.id ?? '');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState('');
-  const title = editor.type === 'site' ? (site ? 'Modifica cantiere' : 'Nuovo cantiere') : (job ? 'Modifica intervento' : 'Aggiungi intervento');
+  const title = editor.type === 'site' ? (site ? 'Modifica cantiere' : prefill ? 'Crea cantiere dal computo' : 'Nuovo cantiere') : (job ? 'Modifica intervento' : 'Aggiungi intervento');
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,13 +64,14 @@ export function Editor({ editor, clients, today, onClose, save }: EditorProps) {
     <form className="editor-form" onSubmit={submit}>
       <fieldset disabled={busy} className="form-grid drawer-fields">
         {editor.type === 'site' ? <>
-          <label>Nome cantiere <input autoFocus name="name" required maxLength={120} defaultValue={site?.name} placeholder="Es. Palazzo Manzoni"/></label>
-          <label>Comune <input name="city" required maxLength={100} defaultValue={site?.city} placeholder="Es. Milano"/></label>
-          <label>Indirizzo <input name="address" maxLength={200} defaultValue={site?.address} placeholder="Via e numero civico"/></label>
+          {prefill && <p className="editor-context">Verifica i dati del computo e completa i campi mancanti. Il cantiere verrà selezionato nella scheda.</p>}
+          <label>Nome cantiere <input autoFocus name="name" required maxLength={120} defaultValue={site?.name ?? prefill?.name.slice(0, 120)} placeholder="Es. Palazzo Manzoni"/></label>
+          <label>Comune <input name="city" required maxLength={100} defaultValue={site?.city ?? prefill?.city.slice(0, 100)} placeholder="Es. Milano"/></label>
+          <label>Indirizzo <input name="address" maxLength={200} defaultValue={site?.address ?? prefill?.address.slice(0, 200)} placeholder="Via e numero civico"/></label>
           <label>Stato <select name="status" defaultValue={site?.status ?? 'planned'}>{siteStates.map(value => <option key={value} value={value}>{siteLabels[value]}</option>)}</select></label>
           <label>Responsabile <input name="manager" maxLength={100} defaultValue={site?.manager} placeholder="Nome e cognome"/></label>
           <div className="client-input">
-            {newClient ? <label>Nome del nuovo cliente <input name="new_client" required maxLength={140} placeholder="Nome o ragione sociale" /></label>
+            {newClient ? <label>Nome del nuovo cliente <input name="new_client" required maxLength={140} defaultValue={clientName} placeholder="Nome o ragione sociale" /></label>
               : <label>Cliente <select name="client_id" aria-label="Cliente" required value={selectedClient} onChange={event => setSelectedClient(event.target.value)}><option value="">Seleziona cliente</option>{clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>}
             <button type="button" className="button text-button" onClick={() => setNewClient(value => !value)}>{!newClient && <Plus size={16}/>} {newClient ? 'Scegli un cliente esistente' : 'Crea cliente'}</button>
           </div>

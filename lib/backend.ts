@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { demoIdentity } from './demo';
-import type { Access, Action, Identity, Organization, Workspace, WorkspaceInput } from './domain';
+import type { Access, Action, Client, Identity, Organization, Workspace, WorkspaceInput } from './domain';
 
 export const demoMode = !process.env.NEXT_PUBLIC_SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && !process.env.SUPABASE_SECRET_KEY;
 
@@ -55,6 +55,18 @@ export async function readWorkspace(db: Database, org: string, filters: Workspac
   });
   if (error) throw error;
   return data as Workspace;
+}
+
+export async function readClientOptions(db: Database, org: string): Promise<Client[]> {
+  const clients: Client[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await db.from('clients').select('id,name')
+      .eq('organization_id', org).order('name').order('id').range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    clients.push(...data);
+    if (data.length < pageSize) return clients;
+  }
 }
 
 export async function readAccess(db: Database, org: string): Promise<Access> {

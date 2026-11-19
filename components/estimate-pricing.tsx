@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Check, ClipboardList, FileUp, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, HardHat, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
-import { Drawer } from './editor';
+import { Drawer, type SitePrefill } from './editor';
+import { SiteFromEstimate } from './site-from-estimate';
 import { orgLink } from './shell';
 import type { Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
@@ -21,7 +22,8 @@ const storedSchema = z.object({ rates: z.array(rateSchema), quotes: z.array(quot
 type Store = z.infer<typeof storedSchema>;
 type PricingAction = z.infer<typeof pricingAction>;
 type DraftItem = ImportedItem & { selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean };
-type Draft = { id: string; title: string; site: string; fileName: string; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
+type Draft = { id: string; title: string; site: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
+  fileName: string; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null; sourceMismatch: boolean };
 const rowsPerPage = 12;
 
@@ -43,8 +45,10 @@ function euroOrDash(value: string) {
   return rate === null ? value + ' €' : formatEuro(rate);
 }
 
-function makeDraft(items: ImportedItem[], fileName: string, site: string, warnings: string[] = []): Draft {
-  return { id: crypto.randomUUID(), title: fileName.replace(/\.pdf$/i, '').slice(0, 160), fileName, site, warnings, warningsReviewed: false,
+function makeDraft(items: ImportedItem[], fileName: string, site: string, warnings: string[] = [], siteDetails?: SitePrefill): Draft {
+  const title = fileName.replace(/\.pdf$/i, '').slice(0, 160);
+  return { id: crypto.randomUUID(), title, fileName, site, warnings, warningsReviewed: false,
+    siteDetails: siteDetails && { ...siteDetails, name: siteDetails.name || title },
     items: items.map(item => ({ ...item, manualPrice: null, selected: true })) };
 }
 
@@ -67,6 +71,7 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   const [draftFilter, setDraftFilter] = useState<'all' | 'review'>('all');
   const [page, setPage] = useState(1);
   const [rateEditor, setRateEditor] = useState<EstimateRate | null>(null);
+  const [siteEditor, setSiteEditor] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
@@ -153,8 +158,10 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
       setProgress('Apertura del PDF…');
       try {
         const { extractEstimate } = await import('@/lib/estimate-pdf');
-        const { items, warnings } = await extractEstimate(file, (current, total) => setProgress(`Lettura pagina ${current} di ${total}…`));
-        setDraft(makeDraft(items, file.name.slice(0, 250), draft?.site || stableSite, warnings));
+        const { items, warnings, siteDetails, importIssue } = await extractEstimate(file, (current, total) => setProgress(`Lettura pagina ${current} di ${total}…`));
+        const fileName = file.name.slice(0, 250);
+        const site = draft?.fileName === fileName ? draft.site || stableSite : stableSite;
+        setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), importIssue });
         setDraftFilter('all'); setPage(1);
       } finally { setProgress(''); }
     });
@@ -167,6 +174,21 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
   function closeRate() {
     setRateEditor(null);
     requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
+  }
+
+  function closeSite() {
+    setSiteEditor(false);
+    requestAnimationFrame(() => {
+      if (focusBack.current?.isConnected) focusBack.current.focus();
+      else document.getElementById('estimate-site')?.focus();
+    });
+  }
+
+  function siteCreated(site: SiteOption) {
+    setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)]);
+    setDraft(current => current && { ...current, site: site.id, createdSite: site.id });
+    setNotice(draft?.importIssue ? 'Cantiere creato dai dati del computo.' : 'Cantiere creato e selezionato per il preventivo.');
+    closeSite();
   }
 
   async function saveRate(rate: EstimateRate) {
@@ -271,21 +293,32 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
           setPage(1); setDraftFilter('all'); setError('');
         }}>Prova l’esempio da 1.900 m²</button>}
       </section> : <section className={`panel ${styles.work}`} aria-labelledby="draft-heading">
-        <div className={styles.workHead}><div><h2 id="draft-heading">Revisione del preventivo</h2><p>{draft.fileName} · {review.length} {review.length === 1 ? 'voce importata' : 'voci importate'}</p></div>
-          <div className={styles.grandTotal}><span>{pending.length ? 'Totale parziale' : 'Totale lavori'}</span><strong>{formatEuro(total)}</strong><small>IVA esclusa</small></div>
+        <div className={styles.workHead}><div><h2 id="draft-heading">{draft.importIssue ? 'Dati del cantiere' : 'Revisione del preventivo'}</h2>
+          <p>{draft.fileName}{!draft.importIssue && ` · ${review.length} ${review.length === 1 ? 'voce importata' : 'voci importate'}`}</p></div>
+          {!draft.importIssue && <div className={styles.grandTotal}><span>{pending.length ? 'Totale parziale' : 'Totale lavori'}</span><strong>{formatEuro(total)}</strong><small>IVA esclusa</small></div>}
         </div>
+        {draft.importIssue && <p className={styles.warning}>{draft.importIssue} Puoi creare il cantiere dai dati della testata.</p>}
         {draft.warnings.length > 0 && <div className={styles.warning}>
           {draft.warnings.map(warning => <p key={warning}>{warning}</p>)}
           <label><input type="checkbox" checked={draft.warningsReviewed} onChange={event => setDraft({ ...draft, warningsReviewed: event.target.checked })}/>
             Ho verificato che le voci importate coprono il preventivo.</label>
         </div>}
-        <div className={`form-grid ${styles.draftFields}`}>
+        {!draft.importIssue && <div className={`form-grid ${styles.draftFields}`}>
           <label>Titolo preventivo<input maxLength={160} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
-          <label>Cantiere<select aria-label="Cantiere" value={draft.site} onChange={event => setDraft({ ...draft, site: event.target.value })}>
+          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} onChange={event => setDraft({ ...draft, site: event.target.value })}>
             <option value="">Seleziona il cantiere</option>{availableSites.map(site => <option key={site.id} value={site.id}>{site.name} · {site.client || site.city}</option>)}
           </select></label>
-        </div>
-        <div className={styles.toolbar}>
+        </div>}
+        {draft.siteDetails && <div className={styles.siteActions}>
+          {draft.createdSite ? <Link className="button text-button" href={orgLink('/cantieri/' + draft.createdSite, identity)}>
+            Apri il cantiere creato <ArrowUpRight size={16}/>
+          </Link> : <button type="button" className="button secondary" disabled={busy} onClick={event => {
+            focusBack.current = event.currentTarget;
+            setNotice('');
+            setSiteEditor(true);
+          }}><HardHat size={17}/> Crea cantiere dal computo</button>}
+        </div>}
+        {!draft.importIssue && <><div className={styles.toolbar}>
           <button className="button secondary" aria-pressed={draftFilter === 'all'} onClick={() => { setDraftFilter('all'); setPage(1); }}>Tutte ({review.length})</button>
           <button className="button secondary" aria-pressed={draftFilter === 'review'} onClick={() => { setDraftFilter('review'); setPage(1); }}>Da verificare ({pending.length})</button>
           {pending.length > 0 && lines.length > 0 && <button type="button" className="button text-button" onClick={() => {
@@ -341,8 +374,9 @@ export function EstimatePricing({ identity, initial, sites, today, requestedSite
           {!included.length && <p>Includi almeno una voce nel preventivo.</p>}
           <button type="button" className="button secondary" disabled={!ready || busy} onClick={() => window.print()}><Printer size={17}/> Stampa o salva PDF</button>
           <button type="button" className="button primary" disabled={!ready || busy} onClick={() => void saveQuote()}><Save size={17}/> Salva preventivo</button>
-        </footer>
+        </footer></>}
       </section>}
+      {siteEditor && draft?.siteDetails && <SiteFromEstimate prefill={draft.siteDetails} identity={identity} today={today} onClose={closeSite} onCreated={siteCreated}/>}
       {rateEditor && <RateEditor key={rateEditor.id} rate={rateEditor} existing={rates.some(rate => rate.id === rateEditor.id)} onClose={closeRate}
         onSave={saveRate} onRemove={removeRate}/>}
     </div>

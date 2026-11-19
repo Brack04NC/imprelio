@@ -32,6 +32,7 @@
 .grandTotal span, .grandTotal strong, .grandTotal small { display: block; }
 .grandTotal strong { font-size: clamp(19px, 3vw, 26px); font-variant-numeric: tabular-nums; }
 .draftFields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 11px; }
+.siteActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .toolbar, .actions, .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .toolbar { margin: 16px 0 9px; }
 .toolbar button[aria-pressed=true] { color: var(--brand); background: #eaf0ff; border-color: #aabeec; }

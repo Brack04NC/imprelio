@@ -61,6 +61,10 @@ function rowText(items: PdfText[]) {
   return items.map(item => item.text.trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 
+export function estimateHeaderText(pages: PdfPage[]) {
+  return pages.slice(0, 2).map(page => textRows(page.items).slice(0, 36).map(row => rowText(row.items)).join('\n')).join('\f');
+}
+
 function formatOf(page: PdfPage) {
   const heading = (value: RegExp) => page.items.find(item => value.test(item.text.trim()));
   const quantity = heading(/^quantit[àa]$/i);

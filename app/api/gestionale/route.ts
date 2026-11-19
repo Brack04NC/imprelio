@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { readAccess, readWorkspace, session, write } from '@/lib/backend';
+import { readAccess, readClientOptions, readWorkspace, session, write } from '@/lib/backend';
 import { actionSchema, parseWorkspaceParams } from '@/lib/domain';
 
 export async function GET(request: NextRequest) {
@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const query = request.nextUrl.searchParams;
     const { identity, db } = await session(query.get('azienda'));
     if (!identity || !db || identity.org.id !== query.get('azienda')) return NextResponse.json({ error: 'Accesso richiesto.' }, { status: 401 });
+    if (query.get('vista') === 'clienti') return NextResponse.json(await readClientOptions(db, identity.org.id));
     if (query.get('vista') === 'accessi') {
       if (identity.org.role !== 'admin') return NextResponse.json({ error: 'Accesso riservato.' }, { status: 403 });
       return NextResponse.json(await readAccess(db, identity.org.id));
