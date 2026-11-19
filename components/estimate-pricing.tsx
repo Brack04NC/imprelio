@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, HardHat, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { Drawer, type SitePrefill } from './editor';
 import { EstimateClientEditor } from './estimate-client-editor';
 import { DownloadEstimatePdf, EstimatePdfArchive, useEstimatePdfArchive } from './estimate-pdf-archive';
@@ -15,14 +15,12 @@ import type { SiteOption } from '@/lib/operation-types';
 import { demoSiteOptions } from '@/lib/operations-demo';
 import { documentLineTotal, formatEuro } from '@/lib/operation-documents';
 import { amount, duplicateEstimateCodes, itemBilling, matchEstimateRate, priceKindLabels, priceKinds, pricingAction, quoteLineSchema, quoteLineTextLimits,
-  quoteLineTextSchema, quoteSchema, rateSchema, reviseQuoteLineText, sourceAmountDisagrees,
+  quoteLineTextSchema, rateSchema, reviseQuoteLineText, sourceAmountDisagrees,
   type EstimateQuote, type EstimateRate, type QuoteInput, type QuoteLine, type QuoteLineText, type QuoteSummary } from '@/lib/estimate-pricing';
 import type { ImportedItem } from '@/lib/estimate-import';
+import { estimatePricingKey as localKey, localPrices } from '@/lib/estimate-pricing-demo';
 import styles from './estimate-pricing.module.css';
 
-const localKey = 'imprelio-estimate-pricing-v1';
-const storedSchema = z.object({ rates: z.array(rateSchema), quotes: z.array(quoteSchema.extend({ created_at: z.iso.datetime() })) });
-type Store = z.infer<typeof storedSchema>;
 type PricingAction = z.infer<typeof pricingAction>;
 type DraftItem = ImportedItem & Pick<QuoteLine, 'sourceTitle' | 'sourceDescription'> & {
   selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean;
@@ -32,14 +30,6 @@ type Draft = { id: string; title: string; site: string; clientFilter?: string; s
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null;
   sourceMismatch: boolean; appliedRate: EstimateRate | null };
 const rowsPerPage = 12;
-
-function localPrices(): Store {
-  try {
-    const result = storedSchema.safeParse(JSON.parse(localStorage.getItem(localKey) ?? 'null'));
-    if (result.success) return result.data;
-  } catch { /* An unavailable browser store starts empty. */ }
-  return { rates: [], quotes: [] };
-}
 
 function quoteTotal(line: QuoteLine) {
   return documentLineTotal('estimate', { quantity: line.quantity, unit_price: line.price });

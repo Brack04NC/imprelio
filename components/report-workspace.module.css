@@ -1,0 +1,25 @@
+.report { min-width: 0; }
+.controls { padding: 16px; margin-bottom: 14px; }
+.filters { display: grid; grid-template-columns: repeat(2, minmax(120px, .65fr)) minmax(150px, 1fr) auto; align-items: end; gap: 10px; }
+.filters label { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-size: 13px; font-weight: 650; }
+.filters input, .filters select { width: 100%; min-width: 0; min-height: 44px; padding: 7px 9px; border: 1px solid #d6dfed; border-radius: 8px; background: white; color: var(--ink); }
+.exports { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.scope { margin: 0 0 12px; color: var(--muted); font-weight: 620; overflow-wrap: anywhere; }
+.financeNavigation { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.financeNavigation [aria-current=page] { background: #eaf0ff; border-color: #aabeec; color: var(--brand); }
+@media (max-width: 790px) {
+  .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters input, .filters select { font-size: 16px; }
+}
+@media (max-width: 410px) {
+  .controls { padding: 12px; }
+  .filters > :is(label:last-of-type, button) { grid-column: 1 / -1; }
+}
+@media print {
+  body:has(.report) :global(.sidebar), body:has(.report) :global(.topbar), body:has(.report) :global(.skip),
+  .controls, .financeNavigation { display: none; }
+  body:has(.report) :global(.app-shell), body:has(.report) :global(.app-body), body:has(.report) :global(.content) {
+    display: block; min-height: 0; max-width: none; padding: 0; margin: 0; background: white;
+  }
+  .report :global(.panel) { box-shadow: none; }
+}

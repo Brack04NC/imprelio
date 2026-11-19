@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, CalendarDays, Calculator, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
+import { Building2, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
@@ -14,6 +14,8 @@ const modules = [
   { section: 'amministrazione', label: areas.amministrazione.title, href: '/gestione/amministrazione', icon: FileText },
   { section: 'computi-metrici', label: areas['computi-metrici'].title, href: '/gestione/computi-metrici', icon: Calculator },
   { section: 'preventivi-computo', label: 'Preventivi da PDF', href: '/gestione/preventivi-computo', icon: FileUp },
+  { section: 'statistiche', label: 'Statistiche', href: '/gestione/statistiche', icon: ChartNoAxesCombined },
+  { section: 'bilanci', label: 'Bilanci e conti', href: '/gestione/bilanci', icon: Wallet },
 ] as const;
 type ShellSection = 'cantieri' | 'agenda' | 'accessi' | typeof modules[number]['section'];
 
