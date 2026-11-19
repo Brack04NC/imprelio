@@ -8,7 +8,7 @@ export function OperationLinks({ identity, site }: { identity: Identity; site?: 
   const links = [
     { title: 'Clienti', icon: Users, hint: 'Anagrafiche e cantieri per cliente', href: '/clienti' },
     { title: 'Magazzino', icon: Warehouse, hint: 'Articoli e registri di carico e scarico', href: '/gestione/magazzino', kind: 'movement' },
-    { title: 'Personale e squadre', icon: Users, hint: 'Dipendenti, operai e squadre esterne', href: '/gestione/personale' },
+    { title: 'Personale e squadre', icon: Users, hint: 'Dipendenti, operai e squadre', href: '/gestione/personale' },
     { title: 'Fatture', icon: FileText, hint: 'Documenti, importi e scadenze', href: '/gestione/amministrazione', kind: 'invoice' },
     { title: 'Ordini', icon: ClipboardList, hint: 'Ordini e stato delle consegne', href: '/gestione/amministrazione', kind: 'order' },
     { title: 'DDT', icon: Truck, hint: 'Carichi, mittenti e destinatari', href: '/gestione/amministrazione', kind: 'ddt' },

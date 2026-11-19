@@ -22,9 +22,13 @@ const rawWrite = z.object({
   lines: z.array(values).max(100).optional(),
 });
 
+export function applicableFields(fields: Field[], values: Values) {
+  return fields.filter(field => !field.when || values[field.when.key] === field.when.value);
+}
+
 function cleanValues(fields: Field[], values: Values = {}): Values {
   const result: Values = {};
-  for (const field of fields) {
+  for (const field of applicableFields(fields, values)) {
     const value = (values[field.key] ?? '').trim();
     if (!value) {
       if (field.required) throw new Error(`Compila il campo “${field.label}”.`);
@@ -63,7 +67,8 @@ export function validateOperation(input: unknown): OperationWrite {
   if (!status || !definition.statuses.some(option => option.value === status)) throw new Error('Seleziona uno stato valido.');
   if (definition.dateRequired && !record_date) throw new Error('Inserisci la data.');
   if (definition.site === 'required' && !site_id) throw new Error('Seleziona il cantiere.');
-  const cleanFields = cleanValues(definition.fields, fields);
+  const formFields = kind === 'crew' && fields?.team_type === undefined ? { ...fields, team_type: 'external' } : fields;
+  const cleanFields = cleanValues(definition.fields, formFields);
   const cleanLines = definition.lineFields ? (lines ?? []).map((line, index) => {
     try { return cleanValues(definition.lineFields!, line); }
     catch (error) { throw new Error(`Riga ${index + 1}. ${error instanceof Error ? error.message : 'Controlla i dati.'}`); }

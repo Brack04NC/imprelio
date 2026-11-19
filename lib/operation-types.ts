@@ -13,6 +13,7 @@ export type Field = {
   max?: number;
   placeholder?: string;
   options?: Option[];
+  when?: { key: string; value: string };
 };
 export type OperationRecord = {
   id: string;
@@ -50,7 +51,7 @@ export type SiteOption = { id: string; name: string; city: string; client: strin
 
 export const areas = {
   magazzino: { title: 'Magazzino', kinds: ['article', 'movement'], description: 'Materiali, attrezzature, veicoli e movimenti di carico e scarico.' },
-  personale: { title: 'Personale e squadre', kinds: ['employee', 'worker', 'crew'], description: 'Dipendenti, operai e squadre esterne assegnati ai lavori.' },
+  personale: { title: 'Personale e squadre', kinds: ['employee', 'worker', 'crew'], description: 'Dipendenti, operai e squadre interne ed esterne assegnati ai lavori.' },
   amministrazione: { title: 'Documenti', kinds: ['invoice', 'order', 'ddt'], description: 'Fatture, ordini e documenti di trasporto collegati ai cantieri.' },
   'computi-metrici': { title: 'Computi metrici', kinds: ['estimate'], description: 'Misure, quantità, prezzi unitari e importi per cantiere.' },
 } satisfies Record<string, { title: string; kinds: OperationKind[]; description: string }>;

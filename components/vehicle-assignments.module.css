@@ -1,0 +1,42 @@
+.listPanel { margin-bottom: 24px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; }
+.filters { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.filters :global(.button) { padding-inline: 11px; }
+.count { font-variant-numeric: tabular-nums; opacity: .85; }
+.search { flex: 1 1 240px; max-width: 330px; }
+.records { list-style: none; padding: 0; margin: 0; }
+.record { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 13px; align-items: start; padding: 16px; border-top: 1px solid var(--line); }
+.recordIcon { display: grid; place-items: center; width: 42px; height: 42px; color: var(--brand); background: #eaf0fd; border-radius: 10px; }
+.details { min-width: 0; overflow-wrap: anywhere; }
+.details strong { display: block; margin: 1px 0 5px; font-size: 15px; }
+.details p { margin: 0; color: var(--muted); }
+.periodTags { list-style: none; padding: 0; margin: 9px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.periodTags li { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 12px; }
+.periodTags svg { flex: none; }
+.record :global(.badge) { margin-top: 9px; }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.pagination span, .hint { color: var(--muted); }
+.hint { font-size: 13px; line-height: 1.5; margin: 0; }
+.newVehicle, .periods { display: grid; gap: 10px; min-width: 0; }
+.periods { margin-top: 6px; }
+.periods h3 { margin: 0 0 3px; }
+.period { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; background: #f9fbff; }
+.period header { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+.periodDates label { min-width: 0; }
+.alignStart { justify-self: start; }
+.remove { margin-inline-end: auto; color: #8b2a24; }
+.danger { background: #972f29; border-color: #972f29; color: #fff; }
+.danger:hover { background: #7c261f; }
+.drawerFooter { flex-wrap: wrap; }
+
+@media (max-width: 620px) {
+  .toolbar { padding: 12px; }
+  .search { max-width: none; }
+  .record { grid-template-columns: auto minmax(0, 1fr); gap: 9px; padding: 13px; }
+  .record :global(.badge) { justify-self: start; align-self: center; margin: 0; grid-column: 2; }
+  .record button { justify-self: end; grid-column: 2; }
+}
+
+@media (max-width: 360px) {
+  .periodDates { grid-template-columns: 1fr; }
+}

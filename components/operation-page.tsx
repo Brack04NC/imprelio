@@ -11,7 +11,7 @@ import type { Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
 import { demoSiteOptions, localOperations, operationsKey, updateLocalOperation } from '@/lib/operations-demo';
 import { areas, type Definition, type Field, type OperationArea, type OperationKind, type OperationRecord, type OperationWrite, type Option, type SiteOption, type Values } from '@/lib/operation-types';
-import { operationDefinition, validateOperation } from '@/lib/operations';
+import { applicableFields, operationDefinition, validateOperation } from '@/lib/operations';
 import { documentLineQuantity, formatQuantity } from '@/lib/operation-documents';
 import { getWarehouseAvailability, isBelowMinimum } from '@/lib/operation-resources';
 import styles from './operation-page.module.css';
@@ -132,6 +132,9 @@ export function OperationPage({ identity, area, today, initial, sites, requested
         <h1>{section.title}</h1><p>{section.description}</p>
       </div></div>
       <div className={styles.recordActions}>
+        {(area === 'magazzino' || area === 'personale') && <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli', identity)}>
+          <Truck size={18}/> Assegnazioni veicoli
+        </Link>}
         {kind === 'estimate' && <Link className="button secondary" href={orgLink('/gestione/preventivi-computo'
           + (selectedSite ? '?cantiere=' + selectedSite.id : ''), identity)}><FileUp size={18}/> Preventivo da PDF</Link>}
         <button className="button primary" onClick={() => openView('create')}><Plus size={19}/> Aggiungi {definition.singular.toLocaleLowerCase('it')}</button>
@@ -281,7 +284,7 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
             </button>}
             {siteNotice && <p role="status" className={styles.notice}>{siteNotice}</p>}
           </div>}
-          {definition.fields.map(field => <InputField key={field.key} field={field} value={fields[field.key]}
+          {applicableFields(definition.fields, fields).map(field => <InputField key={field.key} field={field} value={fields[field.key]}
             articles={articles} change={value => setFields(previous => ({ ...previous, [field.key]: value }))}/>)}
           {lineFields.length > 0 && <section className={styles.lines} aria-label="Righe">
             <div className={styles.lineHead}><h3>{definition.kind === 'estimate' ? 'Misurazioni' : 'Righe del documento'}</h3>

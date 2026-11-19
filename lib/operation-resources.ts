@@ -1,4 +1,4 @@
-import type { Definition, Field, OperationRecord, Option } from './operation-types.ts';
+import type { Definition, Field, OperationRecord, Option, Values } from './operation-types.ts';
 
 const THOUSAND = 1000n;
 const stockLimit = 999_999_999.999;
@@ -66,6 +66,10 @@ const peopleStatuses: Option[] = [
   { value: 'on_leave', label: 'Assente' },
   { value: 'inactive', label: 'Non in servizio' },
 ];
+
+export function getTeamType(fields: Values): 'internal' | 'external' {
+  return fields.team_type === 'internal' ? 'internal' : 'external';
+}
 
 const contactFields: Field[] = [
   { key: 'phone', label: 'Telefono di lavoro', type: 'tel', placeholder: '+39' },
@@ -141,9 +145,9 @@ export const resourceDefinitions: Definition[] = [
     summary: ({ fields }) => [fields.qualification, fields.code, fields.phone || fields.email].filter(Boolean),
   },
   {
-    kind: 'crew', plural: 'Squadre esterne', singular: 'Squadra esterna',
-    description: 'Tieni a portata di mano le imprese partner, i referenti e le assegnazioni ai cantieri.',
-    titleLabel: 'Nome squadra', dateLabel: 'Collaborazione dal', site: 'optional',
+    kind: 'crew', plural: 'Squadre', singular: 'Squadra',
+    description: 'Gestisci squadre interne e imprese partner, con referenti e cantieri di assegnazione.',
+    titleLabel: 'Nome squadra', dateLabel: 'Attiva dal', site: 'optional',
     statuses: [
       { value: 'available', label: 'Disponibile' },
       { value: 'engaged', label: 'Impegnata' },
@@ -151,12 +155,18 @@ export const resourceDefinitions: Definition[] = [
     ],
     defaultStatus: 'available',
     fields: [
-      { key: 'company', label: 'Impresa esterna', placeholder: 'Ragione sociale', required: true },
+      { key: 'team_type', label: 'Tipo di squadra', type: 'select', initial: 'external', required: true,
+        options: [{ value: 'internal', label: 'Interna' }, { value: 'external', label: 'Esterna' }] },
+      { key: 'company', label: 'Impresa esterna', placeholder: 'Ragione sociale', required: true,
+        when: { key: 'team_type', value: 'external' } },
       { key: 'specialty', label: 'Specialità', placeholder: 'Es. Montaggio ponteggi' },
       { key: 'contact', label: 'Referente' },
       { key: 'headcount', label: 'Numero di operatori', type: 'number', decimals: 0, min: 1, max: 999 },
       ...contactFields,
     ],
-    summary: ({ fields }) => [fields.company, fields.specialty, fields.contact, fields.headcount ? `${fields.headcount} ${fields.headcount === '1' ? 'operatore' : 'operatori'}` : ''].filter(Boolean),
+    summary: ({ fields }) => [
+      getTeamType(fields) === 'internal' ? 'Squadra interna' : ['Squadra esterna', fields.company].filter(Boolean).join(' · '),
+      fields.specialty, fields.contact, fields.headcount ? `${fields.headcount} ${fields.headcount === '1' ? 'operatore' : 'operatori'}` : '',
+    ].filter(Boolean),
   },
 ];
