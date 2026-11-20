@@ -5,6 +5,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { calendarDays, calendarLabel, calendarPath, calendarViews, shiftCalendar, type CalendarSelection, type CalendarView } from '@/lib/calendar';
 import type { AgendaItem, Identity } from '@/lib/domain';
 import { CalendarGrid } from './calendar-grid';
+import type { ContextAction } from './context-actions';
 import { orgLink } from './shell';
 import styles from './calendar-panel.module.css';
 
@@ -14,9 +15,10 @@ const navigationLabels = {
   giorno: { previous: 'Giorno precedente', next: 'Giorno successivo' },
 };
 
-export function CalendarPanel({ selection, today, items, identity, canCreate, onCreate, onEdit }: {
+export function CalendarPanel({ selection, today, items, identity, canCreate, onCreate, onEdit, actionsFor }: {
   selection: CalendarSelection; today: string; items: AgendaItem[]; identity: Identity; canCreate: boolean;
   onCreate: (date: string, time?: string) => void; onEdit: (event: AgendaItem) => void;
+  actionsFor: (event: AgendaItem) => ContextAction[];
 }) {
   const { view, date } = selection;
   const previous = shiftCalendar(selection, -1);
@@ -41,6 +43,6 @@ export function CalendarPanel({ selection, today, items, identity, canCreate, on
       </div>
     </header>
     <CalendarGrid view={view} date={date} today={today} days={calendarDays(selection)} items={items}
-      dayHref={day => href('giorno', day)} canCreate={canCreate} onCreate={onCreate} onEdit={onEdit}/>
+      dayHref={day => href('giorno', day)} canCreate={canCreate} onCreate={onCreate} onEdit={onEdit} actionsFor={actionsFor}/>
   </section>;
 }

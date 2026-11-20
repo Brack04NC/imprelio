@@ -5,21 +5,47 @@
 .filters input, .filters select { width: 100%; min-width: 0; min-height: 44px; padding: 7px 9px; border: 1px solid #d6dfed; border-radius: 8px; background: white; color: var(--ink); }
 .exports { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .scope { margin: 0 0 12px; color: var(--muted); font-weight: 620; overflow-wrap: anywhere; }
+.statistics { display: grid; gap: 16px; min-width: 0; }
+.statisticsIndicators { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.statisticsIndicators > div {
+  display: grid; gap: 11px; min-width: 0; padding: 15px;
+  border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow);
+}
+.statisticsIndicators dt {
+  display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 650; overflow-wrap: anywhere;
+}
+.statisticsIndicators dt span {
+  display: grid; place-items: center; flex: none; width: 31px; height: 31px; border-radius: 8px; color: var(--brand); background: #edf2fe;
+}
+.statisticsIndicators dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.statisticsIndicators strong { display: block; font-size: clamp(21px, 3vw, 30px); line-height: 1.15; letter-spacing: -.035em; }
+.statisticsIndicators small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.statisticsExports { padding: 16px; }
+.statisticsExports h2 { font-size: 17px; }
 .financeNavigation { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .financeNavigation [aria-current=page] { background: #eaf0ff; border-color: #aabeec; color: var(--brand); }
 @media (max-width: 790px) {
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filters input, .filters select { font-size: 16px; }
+  .statisticsIndicators { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 }
 @media (max-width: 410px) {
   .controls { padding: 12px; }
   .filters > :is(label:last-of-type, button) { grid-column: 1 / -1; }
+  .statisticsIndicators > div { padding: 11px; gap: 7px; }
+  .statisticsIndicators dt { gap: 5px; font-size: 12px; }
+  .statisticsIndicators dt span { width: 25px; height: 25px; }
+  .statisticsIndicators dt svg { width: 14px; height: 14px; }
+}
+@media (max-width: 360px) {
+  .statisticsControls input[type='date'] { padding-inline: 5px; }
 }
 @media print {
   body:has(.report) :global(.sidebar), body:has(.report) :global(.topbar), body:has(.report) :global(.skip),
-  .controls, .financeNavigation { display: none; }
+  .controls, .financeNavigation, .statisticsExports { display: none; }
   body:has(.report) :global(.app-shell), body:has(.report) :global(.app-body), body:has(.report) :global(.content) {
     display: block; min-height: 0; max-width: none; padding: 0; margin: 0; background: white;
   }
   .report :global(.panel) { box-shadow: none; }
+  .statisticsIndicators > div { box-shadow: none; break-inside: avoid; }
 }

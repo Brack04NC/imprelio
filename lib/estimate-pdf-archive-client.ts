@@ -1,13 +1,17 @@
 'use client';
 
-import { estimatePdfFileName, type EstimatePdfFile } from './estimate-pdf-archive';
+import { estimatePdfFileName, type EstimatePdfFile } from './estimate-pdf-archive.ts';
+import { demoTombstoneIds, isDemoTombstoned } from './trash-storage.ts';
 
 type StoredPdf = EstimatePdfFile & { blob: Blob };
 type UploadPreparation = { file: EstimatePdfFile } | { uploadUrl: string };
 
 export class PdfArchiveError extends Error {
-  constructor(message: string, readonly code?: string) {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
     super(message);
+    this.code = code;
   }
 }
 
@@ -50,7 +54,8 @@ function localArchive<T>(mode: IDBTransactionMode, run: (files: IDBObjectStore) 
 export async function listEstimatePdfs(organization: string, demo: boolean, site: string, signal: AbortSignal) {
   if (demo) {
     const items = await localArchive<StoredPdf[]>('readonly', files => files.getAll());
-    return items.filter(file => !site || file.site_id === site).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))
+    const trash = demoTombstoneIds('estimate_pdf');
+    return items.filter(file => (!site || file.site_id === site) && !trash.has(file.id)).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))
       .map(({ blob: _, ...file }) => file);
   }
   const { files } = await archiveRequest<{ files: EstimatePdfFile[] }>(archiveUrl(organization, site ? { cantiere: site } : {}), { signal });
@@ -61,6 +66,8 @@ export async function archiveEstimatePdf(organization: string, demo: boolean, id
   const file_name = estimatePdfFileName(original.name);
   const metadata = { id, site_id: site, file_name, size_bytes: original.size };
   if (demo) {
+    if (isDemoTombstoned('estimate_pdf', id)) throw new Error('Il PDF è nel cestino. Ripristinalo prima di salvarlo.');
+    if (isDemoTombstoned('site', site)) throw new Error('Il cantiere non è disponibile.');
     const now = new Date().toISOString();
     const file = { ...metadata, created_at: now, uploaded_at: now };
     await localArchive('readwrite', files => files.put({ ...file, blob: original }));
@@ -88,9 +95,16 @@ export async function archiveEstimatePdf(organization: string, demo: boolean, id
   }
 }
 
+export async function getDemoEstimatePdf(id: string) {
+  const file = await localArchive<StoredPdf | undefined>('readonly', files => files.get(id));
+  if (!file) return null;
+  const { blob: _, ...metadata } = file;
+  return metadata;
+}
+
 export async function downloadDemoEstimatePdf(id: string) {
   const file = await localArchive<StoredPdf | undefined>('readonly', files => files.get(id));
-  if (!file) throw new Error('Il PDF non è più disponibile in questo browser.');
+  if (!file || isDemoTombstoned('estimate_pdf', id)) throw new Error('Il PDF non è più disponibile in questo browser.');
   const url = URL.createObjectURL(file.blob);
   const link = document.createElement('a');
   link.href = url;

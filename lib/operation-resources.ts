@@ -93,9 +93,12 @@ export const resourceDefinitions: Definition[] = [
       { key: 'unit', label: 'Unità di misura', type: 'select', options: stockUnits, initial: 'pz', required: true },
       { key: 'stock_min', label: 'Scorta minima', type: 'number', decimals: 3, min: 0, max: stockLimit, initial: '0' },
       { key: 'location', label: 'Posizione in magazzino', placeholder: 'Es. Scaffale B2' },
+      { key: 'revision_due_on', label: 'Scadenza revisione', type: 'date', when: { key: 'category', value: 'vehicles' } },
       { key: 'notes', label: 'Note', type: 'textarea' },
     ],
-    summary: ({ fields }) => [fields.code, fields.location].filter(Boolean),
+    summary: ({ fields }) => [fields.code, fields.location,
+      fields.category === 'vehicles' && /^\d{4}-\d{2}-\d{2}$/.test(fields.revision_due_on ?? '')
+        ? 'Scadenza revisione · ' + fields.revision_due_on.split('-').reverse().join('/') : ''].filter(Boolean),
   },
   {
     kind: 'movement', plural: 'Movimenti', singular: 'Movimento',

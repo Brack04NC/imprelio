@@ -16,6 +16,9 @@
 .detailHeader h2 { font-size: clamp(19px, 3vw, 24px); overflow-wrap: anywhere; margin: 0; }
 .detailHeader p, .sitesHeader p { margin: 4px 0 0; }
 .detailHeader .clientIcon { width: 49px; height: 49px; }
+.detailHeader > .detailActions { display: flex; flex: none; flex-wrap: wrap; gap: 7px; }
+.deleteButton { color: #8b2a24; }
+.deleteButton:hover { background: #fff4f1; }
 .detail .backToDirectory { display: none; }
 .contacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 4px 19px 18px; margin: 0; }
 .contacts dt { color: var(--muted); font-size: 12px; margin-bottom: 3px; }
@@ -37,5 +40,6 @@
 @media (max-width: 500px) {
   .detailHeader, .sitesHeader { flex-wrap: wrap; }
   .detailHeader > div, .sitesHeader > div { flex-basis: 60%; }
+  .detailHeader > .detailActions { flex-basis: 100%; }
   .site .arrow { display: none; }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { requestWorkspace } from '@/lib/client-api';
-import { demoKey, getDemo, updateDemo } from '@/lib/demo';
+import { demoKey, getDemo, getDemoBacking, updateDemo } from '@/lib/demo';
 import type { Action, Client, Identity, Workspace } from '@/lib/domain';
 import type { SiteOption } from '@/lib/operation-types';
 import { Drawer, Editor, type SitePrefill } from './editor';
@@ -30,7 +30,7 @@ export function SiteFromEstimate({ prefill, clientId, identity, today, onClose, 
   async function save(action: Action) {
     if (action.action !== 'site') return;
     if (identity.demo) {
-      const next = updateDemo(getDemo(today), action);
+      const next = updateDemo(getDemoBacking(today), action);
       const site = next.sites.find(item => item.id === action.id);
       if (!site) throw new Error('Il cantiere non è disponibile.');
       const { id, name, city, client_id } = site;

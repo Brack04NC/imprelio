@@ -24,8 +24,11 @@
 .panelContent .entries { padding: 0; }
 .historyPages { display: flex; justify-content: flex-end; gap: 7px; padding: 0 16px 12px; }
 .entries li { display: flex; flex-wrap: wrap; gap: 7px 12px; align-items: center; border-top: 1px solid var(--line); padding: 6px 0; }
+.entries li.selectedPdf { padding-inline: 8px; border-radius: 8px; border-color: #c3d1f5; background: #eff4ff; }
+.selectedPdf strong { scroll-margin-block: 16px; }
 .entries li div { min-width: 0; overflow-wrap: anywhere; margin-right: auto; }
 .entries li .entryActions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-right: 0; }
+.entries li .downloadError { flex: 1 1 100%; margin: 0; }
 .entries strong, .entries small { display: block; }
 .entries strong { color: var(--ink); }
 .entries small { color: var(--muted); margin-top: 4px; }

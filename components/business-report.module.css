@@ -1,6 +1,6 @@
 .report { display: grid; gap: 16px; min-width: 0; }
 
-.metrics, .cashGrid, .activityGrid, .kindGrid { margin: 0; display: grid; gap: 10px; }
+.metrics, .cashGrid, .activityGrid { margin: 0; display: grid; gap: 10px; }
 .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric {
   display: flex; flex-direction: column; min-width: 0; gap: 9px; padding: 16px;
@@ -12,7 +12,7 @@
 .metric[data-tone='cost'] .metricIcon { background: #fff0e1; color: #8e4b17; }
 .metric[data-tone='balance'] .metricIcon { background: #ffffff20; color: #e7efff; }
 .metric[data-tone='balance'] dt, .metric[data-tone='balance'] dd small { color: #d6e1f5; }
-.metric dd, .cashGrid dd, .activityGrid dd, .kindGrid dd, .breakdown dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; }
+.metric dd, .cashGrid dd, .activityGrid dd, .breakdown dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; }
 .metric dd strong { display: block; font-size: clamp(23px, 3.6vw, 34px); letter-spacing: -.045em; line-height: 1.15; overflow-wrap: anywhere; }
 .metric dd small, .cashGrid dd small, .activityGrid dd small { display: block; color: var(--muted); margin-top: 4px; font-size: 12px; line-height: 1.4; }
 .balanceLoss { color: #ffdbbe; }
@@ -29,6 +29,16 @@
 .panelNote { padding: 9px 16px 14px; color: var(--muted); font-size: 12px; }
 .panelNote svg { color: var(--brand); margin-inline-end: 3px; }
 .empty { padding: 20px 16px; text-align: center; color: var(--muted); border-top: 1px solid var(--line); }
+.monthlyTotals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0 16px 16px; }
+.monthlyTotals > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.monthlyTotals dt { font-size: 12px; color: var(--muted); font-weight: 650; }
+.monthlyTotals dd { margin: 4px 0 0; font-size: clamp(15px, 2.4vw, 21px); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; font-weight: 720; }
+
+.economicDetails > summary { min-height: 48px; padding: 14px 16px; color: var(--brand); font-weight: 650; }
+.economicDetails > summary:hover { background: #f7f9fe; }
+.economicDetails > summary:focus-visible { outline-offset: -3px; }
+.economicDetails > summary svg { margin-inline: 3px; }
+.economicDetails > div { padding: 0 12px 12px; }
 
 .chartBlock { padding: 0 16px 13px; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 9px; color: var(--muted); font-size: 12px; font-weight: 650; }
@@ -67,15 +77,13 @@
 .table small.overdue { color: #a02b36; font-weight: 690; }
 
 .cashGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0 16px 10px; }
-.cashGrid > div, .activityGrid > div, .kindGrid > div {
+.cashGrid > div, .activityGrid > div {
   min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fd;
 }
-.cashGrid dt, .activityGrid dt, .kindGrid dt { color: #465a75; font-size: 12px; font-weight: 650; line-height: 1.35; }
+.cashGrid dt, .activityGrid dt { color: #465a75; font-size: 12px; font-weight: 650; line-height: 1.35; }
 .cashGrid dd strong, .activityGrid dd strong { display: block; margin-top: 3px; font-size: clamp(17px, 2.4vw, 21px); line-height: 1.15; overflow-wrap: anywhere; }
 .cashGrid dd .overdue { color: #a02b36; }
 .activityGrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); padding: 0 16px 16px; }
-.kindGrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 116px), 1fr)); padding: 0 16px 13px; }
-.kindGrid dd { margin-top: 2px; font-weight: 720; }
 
 .breakdown { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin: 0 16px 14px; }
 .breakdown > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
@@ -98,13 +106,16 @@
   .metric[data-tone='balance'] { grid-column: 1 / -1; }
   .metric dt { flex-wrap: wrap; }
   .panelHeader { padding-inline: 12px; }
-  .activityGrid, .kindGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cashGrid, .activityGrid, .kindGrid, .chartBlock { padding-inline: 12px; }
+  .activityGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cashGrid, .activityGrid, .chartBlock { padding-inline: 12px; }
+  .monthlyTotals { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding-inline: 12px; }
+  .monthlyTotals > div:last-child { grid-column: 1 / -1; }
   .breakdown { grid-template-columns: minmax(0,1fr); margin-inline: 12px; }
 }
 
 @media print {
   .panel { box-shadow: none; overflow: visible; }
+  .panelHeader { break-inside: avoid; break-after: avoid; }
   .metric[data-tone='balance'] { color: var(--ink); background: var(--surface); border-color: var(--line); }
   .metric[data-tone='balance'] dt, .metric[data-tone='balance'] dd small { color: var(--muted); }
   .metric[data-tone='balance'] .metricIcon { background: #e8efff; color: var(--brand); }
@@ -118,6 +129,7 @@
   .table thead th { white-space: normal; font-size: 8pt; }
   .table thead { display: table-header-group; }
   .table tr { break-inside: avoid; }
-  .dataDetails::details-content { content-visibility: visible; }
-  .dataDetails summary { list-style: none; }
+  :is(.dataDetails, .economicDetails)::details-content { content-visibility: visible; }
+  :is(.dataDetails, .economicDetails) summary { list-style: none; }
+  .economicDetails > div { padding-inline: 0; }
 }

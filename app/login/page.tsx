@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Building2 } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { demoMode } from '@/lib/backend';
 import { signIn, signOut } from './actions';
 
@@ -20,7 +21,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
   const { errore } = await searchParams;
   return <main className="login-screen">
     <section className="login-panel">
-      <span className="brand-icon"><Building2 size={23} /></span>
+      <Image src="/brand/imprelio-simbolo-originale.png" alt="" width={64} height={64} className="login-logo" unoptimized/>
       <h1>Accedi a Imprelio</h1>
       {errore && messages[errore] && <p className="form-error" role="alert">{messages[errore]}</p>}
       {demoMode ? <Link className="button primary" href="/cantieri">Apri la demo <ArrowRight size={17} /></Link> :

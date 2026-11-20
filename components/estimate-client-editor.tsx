@@ -2,8 +2,9 @@
 
 import { useRef, useState, type FormEvent } from 'react';
 import { clientSchema } from '@/lib/client-directory';
-import { demoKey, getDemo } from '@/lib/demo';
+import { demoKey, getDemoBacking } from '@/lib/demo';
 import type { Client, Identity } from '@/lib/domain';
+import { isDemoTombstoned } from '@/lib/trash-storage';
 import { Drawer } from './editor';
 
 export function EstimateClientEditor({ identity, today, initialName, onClose, onCreated }: {
@@ -35,7 +36,8 @@ export function EstimateClientEditor({ identity, today, initialName, onClose, on
     setError('');
     try {
       if (identity.demo) {
-        const store = getDemo(today);
+        const store = getDemoBacking(today);
+        if (isDemoTombstoned('client', profile.id)) throw new Error('Il cliente è nel cestino. Ripristinalo prima di modificarlo.');
         const name = profile.name.toLowerCase();
         if (store.clients.some(client => client.id !== profile.id && client.name.toLowerCase() === name)) {
           throw new Error('Esiste già un cliente con questo nome.');

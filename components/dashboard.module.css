@@ -1,0 +1,8 @@
+.siteActions { display: flex; flex-wrap: wrap; gap: 7px; margin-inline-start: auto; }
+.siteActions :global(.button) { margin-left: 0; }
+.deleteButton { color: #8b2a24; }
+.deleteButton:hover:not(:disabled) { background: #fff4f1; }
+
+@media (max-width: 440px) {
+  .siteActions { margin-inline-start: 0; }
+}

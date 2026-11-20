@@ -7,6 +7,7 @@ import { Drawer } from './editor';
 import { orgLink } from './shell';
 import { useRomeToday } from './use-rome-today';
 import { demoKey } from '@/lib/demo';
+import { demoTrashKey } from '@/lib/trash-storage';
 import { formatDate, type Identity } from '@/lib/domain';
 import { demoSiteOptions, operationsKey, updateLocalOperation } from '@/lib/operations-demo';
 import { validateOperation } from '@/lib/operations';
@@ -104,7 +105,7 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
     }
     sync();
     const onStorage = (event: StorageEvent) => {
-      if ([operationsKey, vehicleAssignmentsKey, demoKey, null].includes(event.key)) sync();
+      if ([operationsKey, vehicleAssignmentsKey, demoKey, demoTrashKey, null].includes(event.key)) sync();
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);

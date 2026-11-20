@@ -1,0 +1,46 @@
+.report { min-width: 0; padding: 16px; }
+.heading { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; justify-content: space-between; }
+.heading h2 { font-size: clamp(18px, 3vw, 22px); letter-spacing: -.02em; }
+.heading p, .note { margin-top: 5px; color: var(--muted); font-size: 13px; }
+.note { margin-top: 10px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; margin: 15px 0 0; }
+.metrics div { padding: 9px 12px; border-radius: 8px; background: #f2f5fc; }
+.metrics dt { color: var(--muted); font-size: 12px; font-weight: 650; }
+.metrics dd { margin: 4px 0 0; font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.hoursChart { min-width: 0; margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.hoursChart h3 { font-size: 15px; line-height: 1.35; }
+.hoursChart p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.hoursRows { display: grid; gap: 11px; margin: 12px 0 0; padding: 0; list-style: none; }
+.hoursRows li { min-width: 0; }
+.hoursRowLabel { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.35; }
+.hoursRowLabel span { overflow-wrap: anywhere; }
+.hoursRowLabel strong { font-variant-numeric: tabular-nums; }
+.hoursTrack { height: 9px; overflow: hidden; margin-top: 4px; border-radius: 5px; background: #e8edf6; }
+.hoursTrack span { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+.tables { display: grid; gap: 12px; min-width: 0; margin-top: 14px; }
+.scroll { min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.scroll table { width: 100%; min-width: 340px; border-collapse: collapse; font-size: 13px; }
+.scroll table[data-wide=true] { min-width: 660px; }
+.scroll caption { padding: 8px 11px; text-align: left; font-weight: 700; }
+.scroll :is(th, td) { padding: 8px 11px; text-align: right; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.scroll th:first-child { text-align: left; overflow-wrap: anywhere; }
+.scroll thead th { color: var(--muted); }
+.scroll small { display: block; color: var(--muted); font-weight: 500; }
+.scroll td { white-space: nowrap; }
+@media (max-width: 410px) {
+  .report { padding: 12px; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics div { padding: 8px; }
+  .hoursChart { padding: 10px; }
+}
+@media print {
+  .export { display: none; }
+  .hoursChart h3 { break-after: avoid; }
+  .hoursRows li { break-inside: avoid; }
+  .hoursTrack { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .scroll { overflow: visible; }
+  .scroll table, .scroll table[data-wide=true] { min-width: 0; }
+  .scroll :is(th, td) { padding: 5px; }
+  .scroll thead { display: table-header-group; }
+  .scroll tr { break-inside: avoid; }
+}

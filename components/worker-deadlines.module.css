@@ -1,0 +1,33 @@
+.header > div, .workerName { min-width: 0; overflow-wrap: anywhere; }
+.panel { margin-block-end: 18px; }
+.records { margin: 0; padding: 0; list-style: none; }
+.record { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 14px 16px; border-block-start: 1px solid var(--line); }
+.recordIcon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; background: #eaf0fd; color: var(--brand); }
+.recordDetails { display: grid; min-width: 0; gap: 6px; }
+.recordHeading { display: flex; flex-wrap: wrap; align-items: start; gap: 5px 9px; }
+.recordHeading h3 { min-width: 0; font-size: 15px; font-weight: 710; line-height: 1.4; overflow-wrap: anywhere; }
+.recordHeading .expired { background: #faecea; color: #8b2a24; }
+.category { color: var(--muted); font-size: 12px; }
+.dates { display: flex; flex-wrap: wrap; gap: 6px 15px; margin: 3px 0 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dates div { display: grid; gap: 3px; }
+.dates dt { color: var(--muted); }
+.dates dd { margin: 0; color: var(--ink); font-weight: 620; }
+.recordActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.recordActions :global(.button).deleteAction { color: #8b2a24; }
+.recordActions :global(.button).deleteAction:hover { background: #fbecec; }
+.empty, .archivedEmpty { border-block-start: 1px solid var(--line); }
+.archivedEmpty { padding: 14px 16px; color: var(--muted); font-size: 13px; }
+.readOnly { margin-block-end: 15px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: var(--surface); }
+.confirmation { display: grid; gap: 9px; overflow-wrap: anywhere; }
+.hint { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.formDates label { min-width: 0; }
+.drawerFooter { flex-wrap: wrap; }
+
+@media (max-width: 680px) {
+  .record { grid-template-columns: auto minmax(0, 1fr); gap: 9px; padding: 13px; }
+  .recordActions { grid-column: 2; justify-content: start; }
+}
+
+@media (max-width: 380px) {
+  .formDates { grid-template-columns: minmax(0, 1fr); }
+}

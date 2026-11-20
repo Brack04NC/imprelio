@@ -7,10 +7,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { agendaPeriods, agendaRange, inAgenda, type AgendaView } from '@/lib/agenda';
 import { calendarPath, calendarRange, type CalendarSelection } from '@/lib/calendar';
 import { requestWorkspace } from '@/lib/client-api';
-import { demoAgenda, demoKey, getDemo, updateDemo } from '@/lib/demo';
-import { formatDate, kindLabels, type Action, type AgendaItem, type Identity, type Site } from '@/lib/domain';
+import { demoAgenda, demoKey, getDemo, getDemoBacking, updateDemo } from '@/lib/demo';
+import { formatDate, type Action, type AgendaItem, type Identity, type Site } from '@/lib/domain';
 import { isDemoTrashed } from '@/lib/trash-demo';
-import { AgendaRow } from './agenda-row';
+import { demoTrashKey } from '@/lib/trash-storage';
+import { AgendaRow, interventionActions, interventionName } from './agenda-row';
 import { CalendarPanel } from './calendar-panel';
 import { Editor } from './editor';
 import { Shell, orgLink } from './shell';
@@ -54,7 +55,7 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     if (!identity.demo) return;
     setDemo(getDemo(today));
     const sync = (event: StorageEvent) => {
-      if (event.key === demoKey || event.key === null) setDemo(getDemo(today));
+      if (event.key === demoKey || event.key === demoTrashKey || event.key === null) setDemo(getDemo(today));
     };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
@@ -89,11 +90,23 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     requestAnimationFrame(() => (!focusAdd && target?.isConnected && target !== document.body ? target : add.current)?.focus());
   }
 
+  function removeIntervention(job: AgendaItem, returnFocus = document.activeElement as HTMLElement | null) {
+    opener.current = returnFocus;
+    setEditing(null);
+    setNotice('');
+    trash.request(job.id, interventionName(job, job.site.name), returnFocus);
+  }
+
+  function actionsFor(job: AgendaItem) {
+    return interventionActions({ edit: () => openEditor(job), remove: () => removeIntervention(job),
+      siteHref: orgLink('/cantieri/' + job.site.id, identity) });
+  }
+
   async function save(action: Action) {
     if (action.action !== 'job') return;
     if (identity.demo) {
       if (isDemoTrashed('intervention', action.id)) throw new Error('L’intervento è nel cestino. Ripristinalo prima di modificarlo.');
-      const next = updateDemo(getDemo(today), action);
+      const next = updateDemo(getDemoBacking(today), action);
       localStorage.setItem(demoKey, JSON.stringify(next));
       setDemo(next);
     } else {
@@ -123,7 +136,7 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     {calendar ? <>
       {displayed.sites.length === 0 && <Link className="button secondary agenda-create-site" href={orgLink('/cantieri?nuovo=1', identity)}>Crea un cantiere per iniziare</Link>}
       <CalendarPanel selection={calendar} today={today} identity={identity} items={displayed.items} canCreate={displayed.sites.length > 0}
-        onEdit={openEditor} onCreate={(date, time) => openEditor({ date, time })}/>
+        onEdit={openEditor} onCreate={(date, time) => openEditor({ date, time })} actionsFor={actionsFor}/>
     </> : <section className="panel agenda-panel" aria-labelledby="agenda-period">
       <header className="panel-header">
         <div><h2 id="agenda-period">{view.period === 'data' ? 'Data selezionata' : agendaPeriods.find(item => item.id === view.period)?.label}</h2>
@@ -143,7 +156,8 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
         </form>
       </div>
       {displayed.items.length ? <ul className="agenda-items">{displayed.items.map(job =>
-        <AgendaRow key={job.id} job={job} showDate={view.period === 'settimana' || view.period === 'ritardo'} edit={() => openEditor(job)}/>
+        <AgendaRow key={job.id} job={job} showDate={view.period === 'settimana' || view.period === 'ritardo'}
+          edit={() => openEditor(job)} actions={actionsFor(job)}/>
       )}</ul> : <div className="empty agenda-empty">
         <CalendarCheck size={25}/><p>{empty[view.period]}</p>
         {displayed.sites.length === 0 && <Link className="button secondary" href={orgLink('/cantieri?nuovo=1', identity)}>Crea un cantiere per iniziare</Link>}
@@ -153,11 +167,7 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     {editing && <Editor
       editor={'site' in editing ? { type: 'job', site: editing.site, job: editing } : { type: 'job', sites: displayed.sites }}
       today={'date' in editing ? editing.date : selectedDay} defaultTime={'date' in editing ? editing.time : undefined}
-      clients={[]} onClose={closeEditor} save={save} onDelete={editedJob ? () => {
-        setEditing(null);
-        setNotice('');
-        trash.request(editedJob.id, [kindLabels[editedJob.kind], editedJob.site.name, editedJob.zone].filter(Boolean).join(' · '), opener.current);
-      } : undefined}/>}
+      clients={[]} onClose={closeEditor} save={save} onDelete={editedJob ? () => removeIntervention(editedJob, opener.current) : undefined}/>}
     {trash.feedback}
     {notice && <div className="toast" role="status">{notice}<button type="button" className="button text-button" onClick={() => setNotice('')}>Chiudi</button></div>}
   </Shell>;

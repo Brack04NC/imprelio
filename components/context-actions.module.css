@@ -1,0 +1,48 @@
+.trigger[aria-expanded='true'] { color: var(--brand); background: #edf2fa; }
+.trigger.compact { width: 24px; height: 24px; padding: 0; }
+
+.menu {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: max-content;
+  min-width: min(186px, calc(100vw - 16px));
+  padding: 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 26px #182f522b;
+}
+
+.item {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.item:not(:disabled):is(:hover, :focus-visible) { background: #edf2fa; }
+.item:focus-visible { outline-offset: -2px; }
+.item[data-tone='danger'] { color: #932e25; }
+.item[data-tone='danger']:not(:disabled):is(:hover, :focus-visible) { background: #fff0ee; }
+
+@media (pointer: coarse) {
+  :global([data-context-actions]) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  :global([data-context-actions] :is(a, input, textarea, [contenteditable]:not([contenteditable='false']), [data-context-native]):not([data-context-primary])) {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}

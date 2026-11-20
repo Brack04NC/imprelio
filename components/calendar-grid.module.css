@@ -25,6 +25,10 @@
 .more { width: fit-content; padding: 2px 3px; border-radius: 4px; color: var(--brand); font-size: 11px; font-weight: 700; }
 .more:hover { text-decoration: underline; }
 
+.eventActions { display: flex; flex-wrap: wrap; align-items: start; min-width: 0; gap: 2px; }
+.eventActions > .event { flex: 1 1 72px; min-height: 44px; }
+.eventActions > .event + button { margin-inline-start: auto; }
+.compactEventActions > .event { flex-basis: 36px; min-height: 24px; }
 .event {
   --event-color: #375995;
   --event-fill: #edf3fe;

@@ -15,7 +15,7 @@ export default async function Statistiche({ searchParams }: {
   if (!identity) redirect(signedIn ? '/login?errore=accesso' : '/login');
   return <Shell identity={identity} section="statistiche">
     <header className="page-header">
-      <div><h1>Statistiche</h1><p>Riepiloghi operativi ed economici per periodo e cantiere.</p></div>
+      <div><h1>Statistiche</h1><p>Segui l’avanzamento dei lavori, le ore registrate e l’andamento economico.</p></div>
     </header>
     <BusinessReportSection identity={identity} db={db} today={romeDate()} mode="statistics" query={query}/>
   </Shell>;

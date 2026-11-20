@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { z } from 'zod';
 import { OperationPage } from '@/components/operation-page';
 import { Shell } from '@/components/shell';
 import { session } from '@/lib/backend';
@@ -16,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ area: str
 }
 
 export default async function OperationalArea({ params, searchParams }: {
-  params: Promise<{ area: string }>; searchParams: Promise<{ azienda?: string; cantiere?: string; tipo?: string; veicolo?: string }>;
+  params: Promise<{ area: string }>; searchParams: Promise<{ azienda?: string; cantiere?: string; tipo?: string; veicolo?: string; scheda?: string }>;
 }) {
   const [{ area }, query] = await Promise.all([params, searchParams]);
   if (!isArea(area)) notFound();
@@ -36,6 +37,9 @@ export default async function OperationalArea({ params, searchParams }: {
   </Shell>;
   const sites = db ? await operationSites(db, identity.org.id) : demoSiteOptions(today);
   const vehicle = area === 'magazzino' && typeof query.veicolo === 'string' ? query.veicolo : undefined;
-  return <OperationPage key={JSON.stringify([identity.org.id, area, query.cantiere, query.tipo, vehicle])} identity={identity}
-    area={area} today={today} initial={result} sites={sites} requestedSite={query.cantiere} requestedKind={query.tipo} requestedVehicle={vehicle}/>;
+  const parsedRecord = z.uuid().safeParse(query.scheda);
+  const record = (area === 'amministrazione' || area === 'computi-metrici') && parsedRecord.success ? parsedRecord.data.toLowerCase() : undefined;
+  return <OperationPage key={JSON.stringify([identity.org.id, area, query.cantiere, query.tipo, vehicle, record])} identity={identity}
+    area={area} today={today} initial={result} sites={sites} requestedSite={query.cantiere} requestedKind={query.tipo}
+    requestedVehicle={vehicle} requestedRecord={record}/>;
 }

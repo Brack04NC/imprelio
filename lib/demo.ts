@@ -1,6 +1,7 @@
 import { compareJobs, PAGE_SIZE, plusDays } from './domain.ts';
 import type { Access, Action, Client, Identity, Job, Row, Site, Workspace, WorkspaceInput } from './domain.ts';
 import { inAgenda, type AgendaRange } from './agenda.ts';
+import { isDemoTombstoned, readDemoTombstones } from './trash-storage.ts';
 
 const key = (n: number) => '74b7f7a0-27a7-4cad-a670-' + String(n).padStart(12, '0');
 const org = { id: key(1), name: 'Impresa Bellini', role: 'admin' as const };
@@ -84,6 +85,7 @@ export function updateDemo(store: Demo, action: Action): Demo {
   switch (action.action) {
     case 'site': {
       const { id, name, city, address, manager, status, new_client } = action;
+      if (isDemoTombstoned('site', id)) throw new Error('Il cantiere è nel cestino. Ripristinalo prima di modificarlo.');
       let client_id = action.client_id;
       if (new_client) {
         const existing = next.clients.find(client => client.name.toLowerCase() === new_client.toLowerCase());
@@ -91,6 +93,7 @@ export function updateDemo(store: Demo, action: Action): Demo {
         if (!existing) next.clients.push({ id: client_id, name: new_client });
       }
       if (!client_id || !next.clients.some(client => client.id === client_id)) throw new Error('Seleziona il cliente del cantiere.');
+      if (isDemoTombstoned('client', client_id)) throw new Error('Il cliente è nel cestino. Ripristinalo prima di collegarlo.');
       const existing = next.sites.find(site => site.id === id);
       const code = existing?.code ?? 'CAN-' + String(next.sites.length + 1).padStart(3, '0');
       const value = { id, name, city, address, manager, status, client_id, code };
@@ -99,7 +102,8 @@ export function updateDemo(store: Demo, action: Action): Demo {
     }
     case 'job': {
       const { id, site_id, kind, zone, due_date, time, notes, status } = action;
-      if (!next.sites.some(site => site.id === site_id) || next.jobs.some(job => job.id === id && job.site_id !== site_id))
+      if (!next.sites.some(site => site.id === site_id) || isDemoTombstoned('site', site_id)
+        || next.jobs.some(job => job.id === id && job.site_id !== site_id))
         throw new Error('L’intervento o il cantiere collegato non è più disponibile.');
       const value = { id, site_id, kind, zone, due_date, time, notes, status };
       next.jobs = next.jobs.some(job => job.id === id)
@@ -107,7 +111,7 @@ export function updateDemo(store: Demo, action: Action): Demo {
       break;
     }
     case 'jobStatus':
-      if (!next.jobs.some(job => job.id === action.id && job.site_id === action.site_id))
+      if (isDemoTombstoned('site', action.site_id) || !next.jobs.some(job => job.id === action.id && job.site_id === action.site_id))
         throw new Error('L’intervento non è più disponibile.');
       next.jobs = next.jobs.map(job => job.id === action.id && job.site_id === action.site_id ? { ...job, status: action.status } : job);
       break;
@@ -125,7 +129,7 @@ export function updateDemo(store: Demo, action: Action): Demo {
 }
 
 export const demoKey = 'imprelio-demo-v1';
-export function getDemo(today: string): Demo {
+export function getDemoBacking(today: string): Demo {
   try {
     const storage = localStorage.getItem(demoKey);
     const value = (storage ? JSON.parse(storage) : null) as Partial<Demo> | null;
@@ -138,4 +142,16 @@ export function getDemo(today: string): Demo {
       && validList(value.access?.invitations, ['email', 'created_at'])) return value as Demo;
   } catch { /* Use sample data if storage is unreadable. */ }
   return demoSeed(today);
+}
+
+export function getDemo(today: string): Demo {
+  const store = getDemoBacking(today);
+  const trash = readDemoTombstones();
+  const clients = new Set(trash.filter(entry => entry.kind === 'client').map(entry => entry.id));
+  const sites = new Set(trash.filter(entry => entry.kind === 'site').map(entry => entry.id));
+  return { ...store,
+    clients: store.clients.filter(client => !clients.has(client.id)),
+    sites: store.sites.filter(site => !sites.has(site.id)),
+    jobs: store.jobs.filter(job => !sites.has(job.site_id)),
+  };
 }

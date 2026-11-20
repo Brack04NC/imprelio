@@ -3,7 +3,7 @@
 import { Mail, Plus, ShieldCheck, Users } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { requestWorkspace } from '@/lib/client-api';
-import { demoKey, getDemo, updateDemo } from '@/lib/demo';
+import { demoKey, getDemo, getDemoBacking, updateDemo } from '@/lib/demo';
 import { actionSchema, type Access, type Action, type Identity } from '@/lib/domain';
 import { Drawer } from './editor';
 import { Shell } from './shell';
@@ -26,7 +26,7 @@ export function AccessPage({ identity, initial, today }: { identity: Identity; i
     const query = new URLSearchParams({ azienda: identity.org.id, vista: 'accessi' });
     try {
       if (identity.demo) {
-        const next = updateDemo(getDemo(today), action);
+        const next = updateDemo(getDemoBacking(today), action);
         localStorage.setItem(demoKey, JSON.stringify(next));
         setAccess(next.access);
       } else {

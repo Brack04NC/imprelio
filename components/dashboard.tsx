@@ -3,16 +3,19 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Building2, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Clock3, HardHat, MapPin, Pencil, Plus, Search, SlidersHorizontal, UserRound, X, Check } from 'lucide-react';
-import { demoKey, demoWorkspace, getDemo, updateDemo } from '@/lib/demo';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Building2, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Clock3, HardHat, MapPin, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Trash2, UserRound, X, Check } from 'lucide-react';
+import { demoKey, demoWorkspace, getDemo, getDemoBacking, updateDemo } from '@/lib/demo';
 import { formatDate, jobLabels, kindLabels, PAGE_SIZE, parseWorkspaceParams, siteLabels, siteStates, type Action, type Identity, type Job, type Row, type Site, type Workspace } from '@/lib/domain';
 import { requestWorkspace } from '@/lib/client-api';
 import { isDemoTrashed } from '@/lib/trash-demo';
+import { demoTrashKey } from '@/lib/trash-storage';
 import { Shell, orgLink } from './shell';
 import { Editor } from './editor';
 import { OperationLinks } from './operation-links';
-import { AgendaRow, jobIcons } from './agenda-row';
+import { AgendaRow, interventionActions, interventionMenuLabel, interventionName, jobIcons } from './agenda-row';
+import { ContextActions } from './context-actions';
 import { useTrashRemoval } from '@/components/trash-removal';
+import styles from './dashboard.module.css';
 
 type EditorState = { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
 type AgendaPeriod = 'today' | 'week' | 'overdue';
@@ -83,12 +86,28 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   for (const key of ['cantiere', 'nuovo', 'cliente', 'cerca']) overviewQuery.delete(key);
   overviewQuery.set('vista', 'elenco');
   const overviewHref = overview + '?' + overviewQuery;
+  const siteTrash = useTrashRemoval(identity, {
+    kind: 'site', onChange(action, id) {
+      if (action === 'delete' && filters.siteId === id) {
+        window.history.replaceState(null, '', overviewHref);
+        requestAnimationFrame(() => { if (document.activeElement === document.body) sites.current?.focus(); });
+      }
+      if (identity.demo) setWorkspace(demoWorkspace(getDemo(today), filters, today));
+      else {
+        if (action === 'delete') setWorkspace(workspace => ({
+          ...workspace, rows: workspace.rows.filter(row => row.id !== id), agenda: workspace.agenda.filter(job => job.site_id !== id),
+          current: workspace.current?.site.id === id ? null : workspace.current,
+        }));
+        setRevision(value => value + 1);
+      }
+    },
+  });
 
   useEffect(() => {
     if (identity.demo) {
       setWorkspace(demoWorkspace(getDemo(today), filters, today));
       const sync = (event: StorageEvent) => {
-        if (event.key === demoKey) setWorkspace(demoWorkspace(getDemo(today), filters, today));
+        if (event.key === demoKey || event.key === demoTrashKey || event.key === null) setWorkspace(demoWorkspace(getDemo(today), filters, today));
       };
       window.addEventListener('storage', sync);
       return () => window.removeEventListener('storage', sync);
@@ -200,9 +219,9 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       if ((action.action === 'job' || action.action === 'jobStatus') && isDemoTrashed('intervention', action.id)) {
         throw new Error('L’intervento è nel cestino. Ripristinalo prima di modificarlo.');
       }
-      const next = updateDemo(getDemo(today), action);
+      const next = updateDemo(getDemoBacking(today), action);
       localStorage.setItem(demoKey, JSON.stringify(next));
-      setWorkspace(demoWorkspace(next, filters, today));
+      setWorkspace(demoWorkspace(getDemo(today), filters, today));
     } else {
       await requestWorkspace(new URLSearchParams({ azienda: identity.org.id }), undefined, action);
       pendingRefresh.current = true;
@@ -229,6 +248,24 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
     finally { jobRequest.current = false; setPendingJob(''); }
   }
 
+  function removeIntervention(job: Job, siteName: string, returnFocus = document.activeElement as HTMLElement | null) {
+    restoreFocus.current = returnFocus;
+    setEditor(null);
+    setNotice(null);
+    trash.request(job.id, interventionName(job, siteName), returnFocus);
+  }
+
+  function actionsFor(job: Job, site: Pick<Site, 'id' | 'name'>, linkToSite = false) {
+    const completed = job.status === 'done';
+    return interventionActions({
+      edit: () => openEditor({ type: 'job', site, job }),
+      remove: () => removeIntervention(job, site.name),
+      siteHref: linkToSite ? siteHref(site.id) : undefined,
+      statusAction: { label: completed ? 'Riapri intervento' : 'Completa intervento', icon: completed ? RotateCcw : Check,
+        disabled: Boolean(pendingJob) || loading, onSelect: () => void toggleJob(job) },
+    });
+  }
+
   const agendaItems = workspace.agenda.filter(job => period === 'overdue' ? job.due_date < today : period === 'week' ? job.due_date > today : job.due_date === today);
   const pageCount = Math.max(1, Math.ceil(workspace.total / PAGE_SIZE));
   const [draft, setDraft] = useState(search.get('q') ?? '');
@@ -252,7 +289,14 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
           <span className="site-mark big"><Building2 size={25}/></span>
           <div><span className="site-code">{current.site.code}</span><h1 ref={heading} tabIndex={-1}>{current.site.name}</h1></div>
           <Badge label={siteLabels[current.site.status]} tone={current.site.status} />
-          <button className="button secondary" onClick={() => openEditor({ type: 'site', site: current.site })}><Pencil size={16}/> Modifica cantiere</button>
+          <div className={styles.siteActions}>
+            <button type="button" className="button secondary" onClick={() => openEditor({ type: 'site', site: current.site })}><Pencil size={16} aria-hidden="true"/> Modifica cantiere</button>
+            <button type="button" className={`button secondary ${styles.deleteButton}`} disabled={Boolean(pendingJob) || loading}
+              onClick={event => {
+                setNotice(null);
+                siteTrash.request(current.site.id, current.site.name, event.currentTarget, 'Puoi recuperare il cantiere e i suoi collegamenti dal Cestino.');
+              }}><Trash2 size={16} aria-hidden="true"/> Elimina cantiere</button>
+          </div>
         </div>
         <dl className="site-data">
           <div><dt><MapPin size={16}/> Indirizzo</dt><dd>{[current.site.address, current.site.city].filter(Boolean).join(', ')}</dd></div>
@@ -268,18 +312,21 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
         </header>
         {current.jobs.length ? <ul className="detail-jobs">{current.jobs.map(job => {
           const Icon = jobIcons[job.kind];
-          return <li key={job.id}>
-            <span className={`job-icon job-${job.kind}`}><Icon size={19}/></span>
-            <div className="detail-job-main"><strong>{kindLabels[job.kind]}{job.zone && ' · ' + job.zone}</strong>
-              <small><CalendarDays size={14}/> <DateLabel date={job.due_date} full/>{job.time && ' · ' + job.time.slice(0, 5)}</small>
-              {job.notes && <p>{job.notes}</p>}
-            </div>
-            <Badge label={job.status !== 'done' && job.due_date < today ? 'In ritardo' : jobLabels[job.status]} tone={job.status !== 'done' && job.due_date < today ? 'late' : job.status}/>
-            <div className="job-actions">
-              <button className="icon-button" aria-label={`Modifica ${kindLabels[job.kind]}${job.zone ? ', ' + job.zone : ''}`} onClick={() => openEditor({ type: 'job', site: current.site, job })}><Pencil size={17}/></button>
-              <button className="button secondary" disabled={Boolean(pendingJob) || loading} onClick={() => toggleJob(job)}>{job.status === 'done' ? 'Riapri' : <><Check size={16}/> Completa</>}</button>
-            </div>
-          </li>;
+          return <ContextActions key={job.id} label={interventionMenuLabel(job, current.site.name)} actions={actionsFor(job, current.site)}>
+            {({ surface, trigger }) => <li {...surface}>
+              <span className={`job-icon job-${job.kind}`}><Icon size={19} aria-hidden="true"/></span>
+              <div className="detail-job-main"><strong>{kindLabels[job.kind]}{job.zone && ' · ' + job.zone}</strong>
+                <small><CalendarDays size={14} aria-hidden="true"/> <DateLabel date={job.due_date} full/>{job.time && ' · ' + job.time.slice(0, 5)}</small>
+                {job.notes && <p>{job.notes}</p>}
+              </div>
+              <Badge label={job.status !== 'done' && job.due_date < today ? 'In ritardo' : jobLabels[job.status]} tone={job.status !== 'done' && job.due_date < today ? 'late' : job.status}/>
+              <div className="job-actions">
+                <button type="button" className="icon-button" data-context-primary aria-label={`Modifica ${kindLabels[job.kind]}${job.zone ? ', ' + job.zone : ''}`} onClick={() => openEditor({ type: 'job', site: current.site, job })}><Pencil size={17}/></button>
+                <button className="button secondary" disabled={Boolean(pendingJob) || loading} onClick={() => toggleJob(job)}>{job.status === 'done' ? 'Riapri' : <><Check size={16}/> Completa</>}</button>
+                {trigger}
+              </div>
+            </li>}
+          </ContextActions>;
         })}</ul> : <div className="empty"><CalendarDays size={26}/><strong>Nessun intervento programmato</strong><p>Aggiungi un sopralluogo, un montaggio o un altro lavoro.</p></div>}
       </section>
       <OperationLinks identity={identity} site={current.site}/>
@@ -339,7 +386,8 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
           <div className="period-control" role="group" aria-label="Periodo dell’agenda">
             {(Object.keys(periodLabels) as AgendaPeriod[]).map(key => <button key={key} aria-pressed={period === key} onClick={() => window.history.pushState(null, '', makeUrl(overview, { periodo: key === 'today' ? null : key === 'overdue' ? 'ritardo' : 'settimana' }))}>{periodLabels[key]}</button>)}
           </div>
-          {agendaItems.length ? <ul className="agenda-items">{agendaItems.map(job => <AgendaRow key={job.id} job={job} showDate={period !== 'today'} edit={() => openEditor({ type: 'job', site: job.site, job })} />)}</ul>
+          {agendaItems.length ? <ul className="agenda-items">{agendaItems.map(job => <AgendaRow key={job.id} job={job}
+            showDate={period !== 'today'} edit={() => openEditor({ type: 'job', site: job.site, job })} actions={actionsFor(job, job.site, true)}/>)}</ul>
             : <div className="empty agenda-empty"><CalendarCheck size={25}/><p>{emptyPeriod[period]}</p></div>}
           {agendaItems.length > 0 && <div className="agenda-footer"><Clock3 size={15}/>{agendaItems.length} {agendaItems.length === 1 ? 'intervento' : 'interventi'}</div>}
         </section>
@@ -347,12 +395,9 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       <OperationLinks identity={identity}/>
     </>}
     {editor && <Editor editor={editor} clients={workspace.clients} today={today} onClose={closeEditor} save={save}
-      onDelete={editedJob && editor.type === 'job' ? () => {
-        setEditor(null);
-        setNotice(null);
-        trash.request(editedJob.id, [kindLabels[editedJob.kind], editor.site.name, editedJob.zone].filter(Boolean).join(' · '), restoreFocus.current);
-      } : undefined}/>}
+      onDelete={editedJob && editor.type === 'job' ? () => removeIntervention(editedJob, editor.site.name, restoreFocus.current) : undefined}/>}
     {trash.feedback}
+    {siteTrash.feedback}
     {notice && <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.error ? <CircleAlert size={19}/> : <Check size={19}/>} {notice.text}<button className="icon-button" onClick={() => setNotice(null)} aria-label="Chiudi avviso"><X size={17}/></button></div>}
   </Shell>;
 }

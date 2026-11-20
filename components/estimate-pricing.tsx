@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, HardHat, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, FolderOpen, HardHat, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
+import { useEffect, useEffectEvent, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import type { z } from 'zod';
+import { ContextActions, type ContextAction } from './context-actions';
 import { Drawer, type SitePrefill } from './editor';
 import { EstimateClientEditor } from './estimate-client-editor';
 import { DownloadEstimatePdf, EstimatePdfArchive, useEstimatePdfArchive } from './estimate-pdf-archive';
@@ -21,6 +22,7 @@ import { amount, duplicateEstimateCodes, itemBilling, matchEstimateRate, priceKi
 import type { ImportedItem } from '@/lib/estimate-import';
 import { estimatePricingKey as localKey, localPrices } from '@/lib/estimate-pricing-demo';
 import { isDemoTrashed } from '@/lib/trash-demo';
+import { demoTrashKey, isDemoTombstoned } from '@/lib/trash-storage';
 import styles from './estimate-pricing.module.css';
 
 type PricingAction = z.infer<typeof pricingAction>;
@@ -58,12 +60,13 @@ const demonstration: ImportedItem = {
   description: 'Montaggio ponteggio con un mese di noleggio incluso.', unit: 'm²', quantity: '1900', sourcePrice: '19', sourceTotal: '36100',
 };
 
-export function EstimatePricing({ identity, initial, sites, clients, today, requestedSite }: {
+export function EstimatePricing({ identity, initial, sites, clients, today, requestedSite, requestedQuote, requestedPdf }: {
   identity: Identity; initial: { rates: EstimateRate[]; quotes: QuoteSummary[] }; sites: SiteOption[];
-  clients: Client[]; today: string; requestedSite?: string;
+  clients: Client[]; today: string; requestedSite?: string; requestedQuote?: string; requestedPdf?: string;
 }) {
   const [rates, setRates] = useState(initial.rates);
   const [quotes, setQuotes] = useState(initial.quotes);
+  const [quotesReady, setQuotesReady] = useState(!identity.demo);
   const [savedPage, setSavedPage] = useState(1);
   const [availableSites, setAvailableSites] = useState(sites);
   const [availableClients, setAvailableClients] = useState(clients);
@@ -85,6 +88,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   const focusBack = useRef<HTMLElement | null>(null);
   const draftHeading = useRef<HTMLHeadingElement>(null);
   const pageHeading = useRef<HTMLHeadingElement>(null);
+  const requestedQuoteOpened = useRef(false);
   const savedQuotesHeading = useRef<HTMLElement>(null);
   const removedQuotes = useRef(new Map<string, QuoteSummary>());
   const draftId = draft?.id;
@@ -133,9 +137,10 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
       setRates(stored.rates);
       const scoped = options.some(site => site.id === requestedSite) ? requestedSite : undefined;
       setQuotes(stored.quotes.filter(quote => !scoped || quote.site_id === scoped));
+      setQuotesReady(true);
     }
     sync();
-    const onStorage = (event: StorageEvent) => { if (event.key === localKey || event.key === demoKey || event.key === null) sync(); };
+    const onStorage = (event: StorageEvent) => { if ([localKey, demoKey, demoTrashKey, null].includes(event.key)) sync(); };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [identity.demo, requestedSite, today]);
@@ -337,6 +342,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
       let summary: QuoteSummary;
       if (identity.demo) {
         if (isDemoTrashed('quote', quote.id)) throw new Error('Il preventivo è nel cestino. Ripristinalo prima di salvarlo.');
+        if (isDemoTombstoned('site', quote.site_id)) throw new Error('Il cantiere selezionato non è disponibile.');
         const stored = localPrices();
         const created_at = stored.quotes.find(item => item.id === quote.id)?.created_at ?? new Date().toISOString();
         const value = { ...quote, created_at };
@@ -356,12 +362,12 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
     });
   }
 
-  async function openQuote(id: string) {
+  async function openQuote(id: string, site?: string) {
     if (dirty && !window.confirm(discardDraftMessage)) return;
     await transact(async () => {
       const quote: EstimateQuote | undefined = identity.demo ? localPrices().quotes.find(item => item.id === id)
         : await remote(new URLSearchParams({ id }));
-      if (!quote) throw new Error('Preventivo non disponibile.');
+      if (!quote || (site && quote.site_id !== site)) throw new Error('Preventivo non disponibile.');
       const saved = { id: quote.id, site: quote.site_id, title: quote.title, fileName: quote.source_name,
         warnings: [], warningsReviewed: true,
         items: quote.lines.map(line => ({ ...line, manualPrice: line.price, selected: true, saved: true, sourceChecked: true })) };
@@ -370,7 +376,19 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
     });
   }
 
-  function requestQuoteRemoval(quote: QuoteSummary, trigger: HTMLElement) {
+  const openRequestedQuote = useEffectEvent((id: string) => {
+    const match = quotes.find(quote => quote.id === id && (!requestedSite || quote.site_id === requestedSite));
+    if (match) void openQuote(match.id, match.site_id);
+    else setError('Il preventivo collegato non è più disponibile.');
+  });
+
+  useEffect(() => {
+    if (!requestedQuote || !quotesReady || busy || archive.saving || requestedQuoteOpened.current) return;
+    requestedQuoteOpened.current = true;
+    openRequestedQuote(requestedQuote);
+  }, [requestedQuote, quotesReady, busy, archive.saving]);
+
+  function requestQuoteRemoval(quote: QuoteSummary, trigger?: HTMLElement) {
     const detail = dirty && draft?.id === quote.id ? 'Le modifiche non salvate al preventivo aperto verranno perse.' : undefined;
     removedQuotes.current.set(quote.id, quote);
     trash.request(quote.id, quote.title, trigger, detail);
@@ -398,7 +416,8 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
       {progress && <p role="status" className={styles.notice}>{progress}</p>}
       {notice && <p role="status" className={styles.notice}>{notice}</p>}
       {error && <p role="alert" className="form-error">{error}</p>}
-      <EstimatePdfArchive identity={identity} archive={archive} sites={availableSites}/>
+      <EstimatePdfArchive identity={identity} archive={archive} sites={availableSites}
+        requestedPdf={requestedSite && !stableSite ? undefined : requestedPdf}/>
       <details className={`panel ${styles.details}`}>
         <summary><ClipboardList size={18}/> Listino aziendale <span>{rates.length} prezzi</span></summary>
         <div className={styles.panelContent}>
@@ -411,13 +430,25 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         </div>
       </details>
       {quotes.length > 0 && <details className={`panel ${styles.details}`}><summary ref={savedQuotesHeading}><Save size={18}/> Preventivi salvati <span>{quotes.length}</span></summary>
-        <ul className={styles.entries}>{quotes.slice((visibleSavedPage - 1) * rowsPerPage, visibleSavedPage * rowsPerPage).map(quote => <li key={quote.id}><div><strong>{quote.title}</strong>
-          <small>{availableSites.find(site => site.id === quote.site_id)?.name ?? quote.source_name}</small></div>
-          <div className={styles.entryActions}>
-            <button type="button" className="button secondary" disabled={busy || archive.saving} aria-label={'Apri preventivo ' + quote.title} onClick={() => void openQuote(quote.id)}>Apri</button>
-            <button type="button" className="button text-button" disabled={busy || archive.saving} aria-haspopup="dialog"
-              aria-label={'Elimina preventivo ' + quote.title} onClick={event => requestQuoteRemoval(quote, event.currentTarget)}><Trash2 size={16} aria-hidden="true"/> Elimina</button>
-          </div></li>)}</ul>
+        <ul className={styles.entries} role="list">{quotes.slice((visibleSavedPage - 1) * rowsPerPage, visibleSavedPage * rowsPerPage).map(quote => {
+          const disabled = busy || archive.saving;
+          const actions: ContextAction[] = [
+            { label: 'Apri preventivo', icon: FolderOpen, disabled, onSelect: () => void openQuote(quote.id) },
+            { label: 'Elimina preventivo', icon: Trash2, tone: 'danger', disabled, onSelect: () => requestQuoteRemoval(quote) },
+          ];
+          return <ContextActions key={quote.id} label={'preventivo ' + quote.title} actions={actions}>
+            {({ surface, trigger }) => <li {...surface}>
+              <div><strong>{quote.title}</strong><small>{availableSites.find(site => site.id === quote.site_id)?.name ?? quote.source_name}</small></div>
+              <div className={styles.entryActions}>
+                <button type="button" className="button secondary" disabled={disabled} data-context-primary
+                  aria-label={'Apri preventivo ' + quote.title} onClick={() => void openQuote(quote.id)}>Apri</button>
+                <button type="button" className="button text-button" disabled={disabled} aria-haspopup="dialog"
+                  aria-label={'Elimina preventivo ' + quote.title} onClick={event => requestQuoteRemoval(quote, event.currentTarget)}><Trash2 size={16} aria-hidden="true"/> Elimina</button>
+                {trigger}
+              </div>
+            </li>}
+          </ContextActions>;
+        })}</ul>
         {quotes.length > rowsPerPage && <div className={styles.historyPages}>
           <button className="button secondary" disabled={visibleSavedPage === 1} onClick={() => setSavedPage(visibleSavedPage - 1)}>Precedenti</button>
           <button className="button secondary" disabled={visibleSavedPage === savedPageCount} onClick={() => setSavedPage(visibleSavedPage + 1)}>Successivi</button>

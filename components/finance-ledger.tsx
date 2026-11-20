@@ -4,6 +4,7 @@ import { ArrowDownLeft, ArrowUpRight, Ban, Download, Landmark, Pencil, Plus, Wal
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { formatDate, type Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
+import { demoTrashKey } from '@/lib/trash-storage';
 import { formatEuro } from '@/lib/operation-documents';
 import { demoSiteOptions } from '@/lib/operations-demo';
 import type { SiteOption } from '@/lib/operation-types';
@@ -67,7 +68,7 @@ export function FinanceLedger({ identity, initial, sites, today }: {
     if (!identity.demo) { setData(initial); setAvailableSites(sites); return; }
     function sync() { setData(localFinance(today)); setAvailableSites(demoSiteOptions(today, true)); }
     sync();
-    const onStorage = (event: StorageEvent) => { if (event.key === financeStorageKey || event.key === demoKey || event.key === null) sync(); };
+    const onStorage = (event: StorageEvent) => { if ([financeStorageKey, demoKey, demoTrashKey, null].includes(event.key)) sync(); };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [identity.demo, initial, sites, today]);

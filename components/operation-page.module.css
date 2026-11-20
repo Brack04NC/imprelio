@@ -36,12 +36,15 @@
 .searchInput:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,235px),1fr)); gap: 13px; list-style: none; margin: 0; padding: 0; }
 .record { display: flex; flex-direction: column; padding: 14px; border: 1px solid #dee6f1; border-radius: 11px; background: #fbfcff; min-width: 0; }
+.selectedRecord { border-color: var(--brand); background: #eff4ff; }
 .recordHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.recordTools { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; }
 .recordIcon { width: 38px; height: 38px; border-radius: 9px; }
 .badge, .low { border-radius: 5px; background: #e9effb; color: #264989; padding: 4px 6px; font-size: 11px; font-weight: 680; }
 .low { align-self: flex-start; margin-top: 7px; color: #894514; background: #fff0df; }
 .maintenanceBadge { color: #894514; background: #fff0df; }
 .record h3 { overflow-wrap: anywhere; margin-bottom: 5px; font-size: 17px; letter-spacing: -.025em; }
+.selectedRecord h3 { scroll-margin-block: 16px; }
 .record time, .summary { color: var(--muted); font-size: 12px; margin: 2px 0; overflow-wrap: anywhere; }
 .stock { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 10px 0 0; }
 .stock div { padding: 8px; background: #eef3fa; border-radius: 8px; overflow-wrap: anywhere; }
@@ -59,10 +62,16 @@
 .site:hover { text-decoration: underline; }
 .recordActions { display: flex; margin-top: auto; padding-top: 11px; gap: 5px; flex-wrap: wrap; }
 .recordActions button, .recordActions a { padding: 0 8px; }
+.recordActions :global(.button).deleteAction { color: #8b2a24; }
+.recordActions :global(.button).deleteAction:hover { background: #fbecec; }
 .empty { display: grid; min-height: 168px; place-content: center; justify-items: center; text-align: center; gap: 8px; color: var(--muted); }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .notice { padding: 8px 12px; margin: 0 0 12px; border-radius: 7px; background: #e7f5ee; color: #176346; }
 .editorError { margin-top: 12px; scroll-margin-block: 12px; }
+.personDrawerFields { grid-auto-rows: max-content; }
+.attendanceAction { display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; align-items: center; margin-bottom: 12px; }
+.attendanceAction p { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.attendanceAction .deadlineLink { max-width: 100%; white-space: normal; text-align: start; }
 .editorFields { border: 0; margin: 0; padding: 0; }
 :global(.drawer):has(.editorFields) { width: min(660px,100%); }
 .maintenanceEditor { display: grid; min-width: 0; gap: 10px; padding: 8px 12px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fd; }

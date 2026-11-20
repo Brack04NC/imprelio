@@ -30,13 +30,23 @@ In **Magazzino → Assegnazioni veicoli** puoi assegnare un veicolo a una squadr
 
 Nella scheda di un articolo di categoria **Veicoli**, attiva **Manutenzione (meccanico)** e imposta le date. Il mezzo risulta **Fuori uso** nei giorni del fermo e torna allo stato impostato sulla scheda il giorno successivo. Se il fermo si sovrappone a un’assegnazione già registrata, riprogramma l’assegnazione prima di salvare. Da **Assegnazioni veicoli** puoi seguire i periodi di manutenzione. Per le attività di cantiere usa **Agenda → Calendario** e aggiungi un intervento nella data o fascia oraria prevista.
 
+La [migrazione 010](supabase/migrations/202611180010_presenze.sql) abilita **Presenze** per dipendenti e operai. Dal calendario o dall’anagrafica seleziona un giorno e registra una fascia di lavoro in cantiere, magazzino o ufficio. Puoi registrare più fasce nella stessa giornata e segnare assenze per l’intera giornata o per un orario. **Statistiche** riepiloga le ore registrate per persona e luogo, con i filtri del periodo e del cantiere.
+
+La [migrazione 011](supabase/migrations/202611180011_scadenze_operai.sql) abilita **Personale e squadre → Operai → Scadenze**. Registra visite mediche, certificazioni o altre scadenze con la data di completamento, la scadenza o entrambe. Le voci in scadenza entro 30 giorni e quelle già scadute sono evidenziate. Puoi archiviare e ripristinare le registrazioni. Lo storico degli operai archiviati è consultabile in sola lettura.
+
+Da **Notifiche** segui gli interventi dell’Agenda entro 7 giorni e le scadenze di fatture, ordini e operai entro 30 giorni, con i ritardi ancora aperti. Il centro mostra anche computi in bozza o in revisione, computi approvati di recente e preventivi PDF appena salvati. La [migrazione 012](supabase/migrations/202611180012_notifiche.sql) aggiunge i PDF in attesa di preventivo. Imprelio confronta il nome del file e il cantiere con i preventivi salvati e cestinati. Gli avvisi si aggiornano all’apertura della sezione e premendo **Aggiorna**.
+
 In **Computi metrici → Preventivo da PDF** puoi salvare un listino con codice o parole nel titolo, unità di misura, tipo di prezzo e durata inclusa. Il PDF viene letto nel browser. Il lettore riconosce i due formati dei computi campione con testo selezionabile, fino a 25 MB, 100 pagine e 350 voci. Puoi correggere le voci ambigue o escluderle esplicitamente, poi salvare il preventivo per il cantiere e stamparlo in PDF. Il salvataggio conserva le voci selezionate e i prezzi applicati.
 
 Da **Preventivi da PDF**, seleziona un cantiere e premi **Salva PDF originale** per aggiungere il documento all’**Archivio computi PDF**. Puoi salvare il file mentre stai ancora rivedendo il preventivo. La migrazione 006 crea il bucket privato e abilita l’accesso ai PDF per i membri dell’azienda.
 
 **Statistiche** riepiloga l’operatività e gli importi delle fatture per periodo e cantiere. **Bilanci e conti** comprende il bilancio gestionale dalle fatture e il registro dei conti, abilitato dalla migrazione 007. Per ottenere un estratto conto, inserisci il saldo iniziale del conto e registra le entrate e le uscite. Il riepilogo, il resoconto fatture e l’estratto conto si possono scaricare in CSV.
 
+La campanella vicino all’account mostra gli avvisi attivi e apre il **Centro notifiche**. In **Cronologia** trovi gli avvisi rilevati all’apertura del pannello o del Centro e gli eventi già ricostruibili dalle schede. La [migrazione 015](supabase/migrations/202611180015_cronologia_notifiche.sql) salva la cronologia per utente e azienda. In **Magazzino**, imposta **Scadenza revisione** sugli articoli di categoria **Veicoli** per ricevere l’avviso entro 30 giorni dalla data.
+
 Con la migrazione 008, puoi eliminare un intervento dalla sua scheda in **Agenda** o **Calendario**, e un preventivo dalla lista **Preventivi salvati**. Dopo la conferma, Imprelio conserva la scheda nel cestino e mostra **Ripristina** per circa tre secondi. Il timer si ferma mentre il cursore o il focus sono sulla notifica.
+
+Applica le migrazioni [013](supabase/migrations/202611180013_cestino_schede.sql) e [014](supabase/migrations/202611180014_cestino_controlli.sql) per usare **Elimina** su schede attive e archiviate di magazzino, personale, documenti, computi e scadenze operai, oltre a clienti, cantieri e PDF originali. Dal menu **Cestino** puoi ripristinare le schede anche dopo la chiusura dell’avviso. Un cantiere eliminato conserva i collegamenti storici e i relativi interventi tornano disponibili quando lo ripristini. Prima di eliminare un cliente, riassegna o elimina i cantieri collegati. Le eliminazioni di magazzino rispettano i controlli sulle giacenze e sui movimenti attivi.
 
 ## Verifica
 

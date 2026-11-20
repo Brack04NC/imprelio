@@ -1,7 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, BarChart3, CalendarClock, HardHat, ReceiptText, Scale, Users, Wallet, type LucideIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { buildBusinessReport, ReportFilters } from '@/lib/business-reports';
-import { formatDate, jobKinds, kindLabels } from '@/lib/domain';
+import { formatDate } from '@/lib/domain';
 import { formatEuro } from '@/lib/operation-documents';
 import styles from './business-report.module.css';
 
@@ -44,12 +44,19 @@ function Metric({ Icon, label, value, note, tone }: {
   </div>;
 }
 
-function MonthlyReport({ monthly, omittedEmpty }: { monthly: Report['monthly']; omittedEmpty: boolean }) {
+function MonthlyReport({ monthly, omittedEmpty, summary }: {
+  monthly: Report['monthly']; omittedEmpty: boolean; summary: Report['summary'];
+}) {
   const max = monthly.reduce((highest, month) => [month.revenue, month.cost, highest].reduce((a, b) => a > b ? a : b), 0n);
   const barHeight = (value: bigint) => max > 0n && value > 0n ? (Number(value * 10000n / max) / 100) + '%' : '0%';
   return <Panel id="report-months" title="Ricavi e costi per mese" Icon={BarChart3}
     description={omittedEmpty ? 'Imponibili raggruppati per data fattura. Nei periodi oltre dieci anni compaiono i mesi con fatture valide.'
       : 'Imponibili raggruppati per data fattura.'}>
+    <dl className={styles.monthlyTotals} aria-label="Totali fatturati, IVA esclusa">
+      <div><dt>Ricavi fatturati</dt><dd>{money(summary.revenue)}</dd></div>
+      <div><dt>Costi fatturati</dt><dd>{money(summary.cost)}</dd></div>
+      <div><dt>Saldo fatturato</dt><dd className={netTone(summary.balance)}>{money(summary.balance)}</dd></div>
+    </dl>
     {!monthly.length ? <p className={styles.empty}>Nessun importo fatturato nel periodo.</p> : <>
       {max > 0n ? <div className={styles.chartBlock}>
         <div className={styles.legend} aria-hidden="true">
@@ -107,12 +114,9 @@ function SiteMargins({ sites }: { sites: Report['sites'] }) {
   </Panel>;
 }
 
-function Activity({ figures }: { figures: Report['activity'] }) {
+export function StatisticsResources({ figures }: { figures: Report['activity'] }) {
   const items = [
-    { label: 'Cantieri attivi', value: figures.activeSites, hint: `su ${count.format(figures.sites)} cantieri` },
     { label: 'Clienti', value: figures.clients, hint: 'Collegati ai cantieri' },
-    { label: 'Interventi nel periodo', value: figures.jobs, hint: `${count.format(figures.jobsCompleted)} completati` },
-    { label: 'Interventi in ritardo', value: figures.jobsOverdue, hint: 'Ancora aperti' },
     { label: 'Ordini', value: figures.orders }, { label: 'DDT', value: figures.ddt },
     { label: 'Computi metrici', value: figures.estimates }, { label: 'Preventivi da PDF', value: figures.quotes },
     { label: 'Dipendenti', value: figures.employees }, { label: 'Operai', value: figures.workers },
@@ -120,19 +124,13 @@ function Activity({ figures }: { figures: Report['activity'] }) {
       hint: figures.vehiclesAssigned === null ? 'Dati sulle assegnazioni non disponibili' : undefined },
     { label: 'Magazzino aziendale', value: figures.stockArticles, hint: `${count.format(figures.lowStock)} articoli sotto scorta minima` },
   ];
-  return <Panel id="report-activity" title="Operatività" Icon={Users}
-    description="Interventi e documenti nel periodo. Anagrafiche, magazzino e assegnazioni allo stato attuale.">
+  return <Panel id="report-activity" title="Risorse e documenti" Icon={Users}
+    description="Documenti del periodo. Anagrafiche, assegnazioni e magazzino allo stato attuale.">
     <dl className={styles.activityGrid}>
       {items.map(item => <div key={item.label}>
         <dt>{item.label}</dt><dd><strong>{item.value === null ? '—' : count.format(item.value)}</strong>{item.hint && <small>{item.hint}</small>}</dd>
       </div>)}
     </dl>
-    {figures.jobs > 0 && <details className={styles.dataDetails}>
-      <summary>Interventi per tipo</summary>
-      <dl className={styles.kindGrid}>
-        {jobKinds.map(kind => <div key={kind}><dt>{kindLabels[kind]}</dt><dd>{count.format(figures.jobsByKind[kind] ?? 0)}</dd></div>)}
-      </dl>
-    </details>}
   </Panel>;
 }
 
@@ -223,20 +221,30 @@ export function BusinessReportView({ mode, report, filters, today }: {
   mode: 'statistics' | 'balance'; report: Report; filters: ReportFilters; today: string;
 }) {
   const { summary } = report;
-  const stats = mode === 'statistics';
+  const limitations = <p className={styles.scope}><ReceiptText size={15} aria-hidden="true"/>
+    {filters.site ? 'Riepilogo dalle fatture registrate per il cantiere selezionato.' : 'Riepilogo dalle fatture registrate in azienda.'}
+    {' '}Bozze e importi incompleti sono riepilogati a parte.</p>;
+  const details = <>
+    {limitations}
+    <CashStatus summary={summary} today={today} settled={report.settledInvoices}/>
+    <SiteMargins sites={report.sites}/>
+    <Documents report={report} balance={mode === 'balance'}/>
+  </>;
+
+  if (mode === 'statistics') return <div className={styles.report}>
+    <MonthlyReport monthly={report.monthly} omittedEmpty={report.monthlyOmittedEmpty} summary={summary}/>
+    <details className={`${styles.panel} ${styles.economicDetails}`}>
+      <summary><ReceiptText size={18} aria-hidden="true"/> Dettaglio economico e fatture</summary>
+      <div className={styles.report}>{details}</div>
+    </details>
+  </div>;
+
   return <div className={styles.report}>
     <dl className={styles.metrics} aria-label="Indicatori del fatturato, IVA esclusa">
       <Metric Icon={ArrowUpRight} label="Ricavi fatturati" value={summary.revenue} note="Imponibile delle fatture emesse" tone="revenue"/>
       <Metric Icon={ArrowDownLeft} label="Costi fatturati" value={summary.cost} note="Imponibile delle fatture ricevute" tone="cost"/>
       <Metric Icon={Scale} label="Saldo fatturato" value={summary.balance} note="Ricavi meno costi, IVA esclusa" tone="balance"/>
     </dl>
-    <p className={styles.scope}><ReceiptText size={15} aria-hidden="true"/>
-      {filters.site ? 'Riepilogo dalle fatture registrate per il cantiere selezionato.' : 'Riepilogo dalle fatture registrate in azienda.'}
-      {' '}Bozze e importi incompleti sono riepilogati a parte.</p>
-    {stats && <MonthlyReport monthly={report.monthly} omittedEmpty={report.monthlyOmittedEmpty}/>}
-    <CashStatus summary={summary} today={today} settled={report.settledInvoices}/>
-    <SiteMargins sites={report.sites}/>
-    {stats && <Activity figures={report.activity}/>}
-    <Documents report={report} balance={!stats}/>
+    {details}
   </div>;
 }

@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Archive, ArrowLeft, ArrowUpRight, Boxes, Calculator, ClipboardList, FileText, FileUp, HardHat, Package, Pencil, Plus, RotateCcw, Search, Truck, Users, Warehouse, Wrench, X } from 'lucide-react';
+import { Archive, ArrowLeft, ArrowUpRight, Boxes, Calculator, CalendarCheck, CalendarClock, ClipboardList, FileText, FileUp, HardHat, Package, Pencil, Plus, RotateCcw, Search, Trash2, Truck, Users, Warehouse, Wrench, X } from 'lucide-react';
+import { ContextActions, type ContextAction } from './context-actions';
 import { Drawer } from './editor';
 import { SiteFromEstimate } from './site-from-estimate';
 import { Shell, orgLink } from './shell';
+import { useTrashRemoval } from './trash-removal';
 import { useRomeToday } from './use-rome-today';
 import type { Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
@@ -15,6 +17,7 @@ import { areas, type Definition, type Field, type OperationArea, type OperationK
 import { applicableFields, operationDefinition, validateOperation } from '@/lib/operations';
 import { documentLineQuantity, formatQuantity } from '@/lib/operation-documents';
 import { formatStockQuantity, getWarehouseAvailability, isBelowMinimum, stockMinimum } from '@/lib/operation-resources';
+import { demoTrashKey } from '@/lib/trash-storage';
 import { localVehicleAssignments } from '@/lib/vehicle-assignments';
 import { maintenanceScheduleError, periodsOverlap, vehicleMaintenance, vehicleMaintenanceState } from '@/lib/vehicle-maintenance';
 import styles from './operation-page.module.css';
@@ -29,6 +32,14 @@ function dateLabel(value: string) {
   return value.split('-').reverse().join('/');
 }
 
+function attendanceHref(identity: Identity, person?: string) {
+  return orgLink('/gestione/presenze' + (person ? '?' + new URLSearchParams({ persona: person }) : ''), identity);
+}
+
+function workerDeadlinesHref(identity: Identity, worker: string) {
+  return orgLink('/gestione/operai/' + encodeURIComponent(worker) + '/scadenze', identity);
+}
+
 const maintenanceLabels = {
   active: 'In manutenzione', scheduled: 'Manutenzione programmata', past: 'Manutenzione conclusa',
 } as const;
@@ -38,9 +49,9 @@ function effectiveStatus(record: OperationRecord, today: string) {
   return period && vehicleMaintenanceState(period, today) === 'active' ? 'inactive' : record.status;
 }
 
-export function OperationPage({ identity, area, today: initialToday, initial, sites, requestedSite, requestedKind, requestedVehicle }: {
+export function OperationPage({ identity, area, today: initialToday, initial, sites, requestedSite, requestedKind, requestedVehicle, requestedRecord }: {
   identity: Identity; area: OperationArea; today: string; initial: OperationRecord[]; sites: SiteOption[];
-  requestedSite?: string; requestedKind?: string; requestedVehicle?: string;
+  requestedSite?: string; requestedKind?: string; requestedVehicle?: string; requestedRecord?: string;
 }) {
   const router = useRouter();
   const today = useRomeToday(initialToday, area === 'magazzino');
@@ -51,6 +62,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const [kind, setKind] = useState(linkedId ? 'article' : kinds.find(value => value === requestedKind) ?? kinds[0]);
   const [vehicleFilter, setVehicleFilter] = useState(linkedId);
   const [records, setRecords] = useState(initial);
+  const [recordsReady, setRecordsReady] = useState(!identity.demo);
   const [availableSites, setAvailableSites] = useState(sites);
   const [siteFilter, setSiteFilter] = useState(typeof requestedSite === 'string' && /^[a-f0-9-]{36}$/i.test(requestedSite) ? requestedSite : '');
   const [query, setQuery] = useState('');
@@ -61,6 +73,8 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error?: boolean }>();
   const focusBack = useRef<HTMLElement | null>(null);
+  const selectedHeading = useRef<HTMLHeadingElement>(null);
+  const selectedRevealed = useRef(false);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const inFlight = useRef(false);
   const definition = operationDefinition(kind);
@@ -68,6 +82,15 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const warehouseAvailability = useMemo(() => area === 'magazzino' ? getWarehouseAvailability(records) : new Map<string, bigint>(), [area, records]);
   const movementFor = editor && editor !== 'create' && 'movementFor' in editor ? editor.movementFor : '';
   const editingRecord = editor && editor !== 'create' && 'id' in editor ? editor : undefined;
+  const trash = useTrashRemoval(identity, { kind: 'operation', onChange(action, id) {
+    setNotice(undefined);
+    if (identity.demo) {
+      setRecords(localOperations(today, area));
+    } else {
+      if (action === 'delete') setRecords(previous => previous.filter(record => record.id !== id));
+      router.refresh();
+    }
+  } });
 
   useEffect(() => {
     if (!identity.demo) {
@@ -75,10 +98,10 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
       setAvailableSites(sites);
       return;
     }
-    const sync = () => { setRecords(localOperations(today, area)); setAvailableSites(demoSiteOptions(today, true)); };
+    const sync = () => { setRecords(localOperations(today, area)); setAvailableSites(demoSiteOptions(today, true)); setRecordsReady(true); };
     sync();
     const onStorage = (event: StorageEvent) => {
-      if (event.key === operationsKey || event.key === demoKey || event.key === null) sync();
+      if ([operationsKey, demoKey, demoTrashKey, null].includes(event.key)) sync();
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -90,13 +113,13 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   }, [identity.demo, linkedId, area, today]);
 
   useEffect(() => {
-    if (area !== 'magazzino' || identity.demo) return;
-    function refreshStock() {
+    if (identity.demo) return;
+    function refreshRecords() {
       if (document.visibilityState === 'visible' && !inFlight.current) router.refresh();
     }
-    window.addEventListener('focus', refreshStock);
-    return () => window.removeEventListener('focus', refreshStock);
-  }, [area, identity.demo, router]);
+    window.addEventListener('focus', refreshRecords);
+    return () => window.removeEventListener('focus', refreshRecords);
+  }, [identity.demo, router]);
 
   function selectKind(value: OperationKind) {
     if (value !== 'article') setVehicleFilter('');
@@ -161,6 +184,13 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     } finally { inFlight.current = false; setBusy(false); }
   }
 
+  function toggleArchive(record: OperationRecord) {
+    void persist({ action: record.archived ? 'restore' : 'archive', id: record.id, kind: record.kind }).catch(error => {
+      setNotice({ text: error instanceof Error ? error.message : 'Operazione non riuscita.', error: true });
+      focusNotice();
+    });
+  }
+
   const selectedSite = availableSites.find(site => site.id === siteFilter);
   const siteById = new Map(availableSites.map(site => [site.id, site]));
   const needle = query.trim().toLocaleLowerCase('it');
@@ -168,6 +198,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const filterByVehicle = kind === 'article' && vehicleFilter;
   const linkedVehicle = filterByVehicle && records.find(record => record.id === vehicleFilter && record.kind === 'article'
     && record.fields.category === 'vehicles');
+  const linkedRecord = requestedRecord && records.find(record => record.id === requestedRecord && record.kind === kind && !record.archived);
   const hasFilters = Boolean(needle || status || filterBySite || filterByVehicle);
   const active = records.filter(record => record.kind === kind && !record.archived).length;
   const archived = records.filter(record => record.kind === kind && record.archived).length;
@@ -178,13 +209,21 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const filtered = records.filter(record => record.kind === kind && record.archived === archive
     && (!filterBySite || record.site_id === filterBySite.id) && (!filterByVehicle || linkedVehicle && record.id === linkedVehicle.id)
     && (!status || effectiveStatus(record, today) === status) && matchesSearch(record))
-    .sort((first, second) => second.updated_at.localeCompare(first.updated_at) || first.title.localeCompare(second.title, 'it'));
+    .sort((first, second) => Number(second.id === requestedRecord) - Number(first.id === requestedRecord)
+      || second.updated_at.localeCompare(first.updated_at) || first.title.localeCompare(second.title, 'it'));
   const pageCount = Math.max(1, Math.ceil(filtered.length / numberPerPage));
   const shownPage = Math.min(page, pageCount);
   const shown = filtered.slice((shownPage - 1) * numberPerPage, shownPage * numberPerPage);
   const articles = records.filter(record => record.kind === 'article' && !record.archived)
     .map(record => ({ value: record.id, label: record.title + (record.fields.unit ? ' · ' + record.fields.unit : '') }));
   const needsArticle = kind === 'movement' && !articles.length;
+  const selectedVisible = shown.some(record => record.id === requestedRecord);
+
+  useEffect(() => {
+    if (!recordsReady || !selectedVisible || selectedRevealed.current || !selectedHeading.current) return;
+    selectedRevealed.current = true;
+    selectedHeading.current.focus();
+  }, [recordsReady, selectedVisible]);
 
   function openCreate() {
     if (needsArticle) {
@@ -202,6 +241,9 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         <h1>{section.title}</h1><p>{section.description}</p>
       </div></div>
       <div className={styles.recordActions}>
+        {area === 'personale' && <Link className="button secondary" href={attendanceHref(identity)}>
+          <CalendarCheck size={18} aria-hidden="true"/> Presenze
+        </Link>}
         {(area === 'magazzino' || area === 'personale') && <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli', identity)}>
           <Truck size={18}/> Assegnazioni veicoli
         </Link>}
@@ -258,52 +300,76 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         <button type="button" className="button text-button" onClick={() => { setVehicleFilter(''); setPage(1); }}>Mostra tutti gli articoli</button>
       </div>}
       {notice && <p ref={noticeRef} tabIndex={-1} role={notice.error ? 'alert' : 'status'} className={notice.error ? 'form-error' : styles.notice}>{notice.text}</p>}
-      {shown.length > 0 ? <ul className={styles.cards}>{shown.map(record => {
+      {recordsReady && requestedRecord && !linkedRecord && !archive && kind === (requestedKind ?? kinds[0]) &&
+        <p role="status" className={styles.linkedVehicle}>La scheda collegata non è più disponibile tra le schede attive.</p>}
+      {shown.length > 0 ? <ul className={styles.cards} role="list">{shown.map(record => {
         const Icon = icons[record.kind];
         const site = siteById.get(record.site_id ?? '');
+        const siteHref = site && orgLink('/cantieri/' + site.id, identity);
         const available = warehouseAvailability.get(record.id) ?? 0n;
         const low = record.kind === 'article' && isBelowMinimum(record, available);
         const isVehicle = record.kind === 'article' && record.fields.category === 'vehicles';
         const period = vehicleMaintenance(record);
         const maintenanceState = period ? vehicleMaintenanceState(period, today) : null;
         const cardStatus = maintenanceState === 'active' ? 'inactive' : record.status;
-        return <li key={record.id} className={styles.record}>
-          <div className={styles.recordHead}><span className={styles.recordIcon}><Icon size={19}/></span>
-            <span className={`${styles.badge} ${maintenanceState === 'active' ? styles.maintenanceBadge : ''}`}>
-              {definition.statuses.find(item => item.value === cardStatus)?.label ?? cardStatus}</span></div>
-          <h3>{record.title}</h3>
-          {record.record_date && <time dateTime={record.record_date}>{dateLabel(record.record_date)}</time>}
-          {definition.summary?.(record, records).filter(Boolean).map((value, index) => <p key={index} className={styles.summary}>{value}</p>)}
-          {record.kind === 'article' && <dl className={styles.stock}>
-            <div><dt>{isVehicle ? 'Giacenza' : 'Disponibilità'}</dt><dd>{formatStockQuantity(available)} {record.fields.unit}</dd></div>
-            <div><dt>Scorta minima</dt><dd>{formatStockQuantity(stockMinimum(record))} {record.fields.unit}</dd></div>
-          </dl>}
-          {period && maintenanceState && <div className={`${styles.maintenanceCard} ${styles[maintenanceState]}`}>
-            <Wrench size={15} aria-hidden="true"/>
-            <div><strong>{maintenanceLabels[maintenanceState]}</strong>
-              <span>Dal <time dateTime={period.start_date}>{dateLabel(period.start_date)}</time> al <time dateTime={period.end_date}>{dateLabel(period.end_date)}</time></span>
+        const selected = record.id === requestedRecord;
+        const openLabel = record.archived ? 'Apri' : 'Modifica';
+        const archiveLabel = record.archived ? 'Ripristina' : 'Archivia';
+        const ArchiveIcon = record.archived ? RotateCcw : Archive;
+        const contextActions: ContextAction[] = [{ label: openLabel, icon: Pencil, disabled: busy, onSelect: () => openView(record) }];
+        if (siteHref) contextActions.push({ label: 'Apri cantiere', icon: HardHat, href: siteHref });
+        contextActions.push(
+          { label: archiveLabel, icon: ArchiveIcon, disabled: busy, onSelect: () => toggleArchive(record) },
+          { label: 'Elimina', icon: Trash2, tone: 'danger', disabled: busy, onSelect: () => trash.request(record.id, record.title) },
+        );
+        return <ContextActions key={record.id} label={record.title} actions={contextActions}>
+          {({ surface, trigger }) => <li {...surface} className={`${styles.record}${selected ? ` ${styles.selectedRecord}` : ''}`}>
+            <div className={styles.recordHead}><span className={styles.recordIcon}><Icon size={19}/></span>
+              <div className={styles.recordTools}>
+                <span className={`${styles.badge} ${maintenanceState === 'active' ? styles.maintenanceBadge : ''}`}>
+                  {definition.statuses.find(item => item.value === cardStatus)?.label ?? cardStatus}</span>
+                {trigger}
+              </div></div>
+            <h3 ref={selected ? selectedHeading : undefined} tabIndex={selected ? -1 : undefined}>{record.title}</h3>
+            {record.record_date && <time dateTime={record.record_date}>{dateLabel(record.record_date)}</time>}
+            {definition.summary?.(record, records).filter(Boolean).map((value, index) => <p key={index} className={styles.summary}>{value}</p>)}
+            {record.kind === 'article' && <dl className={styles.stock}>
+              <div><dt>{isVehicle ? 'Giacenza' : 'Disponibilità'}</dt><dd>{formatStockQuantity(available)} {record.fields.unit}</dd></div>
+              <div><dt>Scorta minima</dt><dd>{formatStockQuantity(stockMinimum(record))} {record.fields.unit}</dd></div>
+            </dl>}
+            {period && maintenanceState && <div className={`${styles.maintenanceCard} ${styles[maintenanceState]}`}>
+              <Wrench size={15} aria-hidden="true"/>
+              <div><strong>{maintenanceLabels[maintenanceState]}</strong>
+                <span>Dal <time dateTime={period.start_date}>{dateLabel(period.start_date)}</time> al <time dateTime={period.end_date}>{dateLabel(period.end_date)}</time></span>
+              </div>
+            </div>}
+            {low && <span className={styles.low}>Sotto scorta minima</span>}
+            {site && siteHref && <Link className={styles.site} href={siteHref}>{site.name}<ArrowUpRight size={14}/></Link>}
+            <div className={styles.recordActions}>
+              <button className="button secondary" data-context-primary="" disabled={busy}
+                onClick={() => openView(record)}><Pencil size={15}/>{openLabel}</button>
+              {(record.kind === 'employee' || record.kind === 'worker') &&
+                <Link className="button secondary" href={attendanceHref(identity, record.id)} aria-label={`Presenze di ${record.title}`}>
+                  <CalendarCheck size={15} aria-hidden="true"/> Presenze
+                </Link>}
+              {record.kind === 'worker' &&
+                <Link className="button secondary" href={workerDeadlinesHref(identity, record.id)} aria-label={`Scadenze di ${record.title}`}>
+                  <CalendarClock size={15} aria-hidden="true"/> Scadenze
+                </Link>}
+              {record.kind === 'article' && !record.archived && <button type="button" className="button secondary" disabled={busy}
+                onClick={() => openView({ movementFor: record.id })}><Boxes size={15}/> Carico / scarico</button>}
+              {isVehicle && record.status === 'active' && !record.archived &&
+                <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli?veicolo=' + record.id, identity)}>
+                  <Truck size={15}/> {maintenanceState === 'active' ? 'Assegna per altre date' : 'Assegna'}
+                </Link>}
+              <button className="button text-button" disabled={busy} onClick={() => toggleArchive(record)}>
+                <ArchiveIcon size={15}/>{archiveLabel}</button>
+              <button type="button" className={`button text-button ${styles.deleteAction}`} disabled={busy}
+                aria-label={`Elimina ${record.title}`} onClick={event => trash.request(record.id, record.title, event.currentTarget)}>
+                <Trash2 size={15} aria-hidden="true"/> Elimina</button>
             </div>
-          </div>}
-          {low && <span className={styles.low}>Sotto scorta minima</span>}
-          {site && <Link className={styles.site} href={orgLink('/cantieri/' + site.id, identity)}>{site.name}<ArrowUpRight size={14}/></Link>}
-          <div className={styles.recordActions}>
-            <button className="button secondary" disabled={busy} onClick={() => openView(record)}><Pencil size={15}/>{record.archived ? 'Apri' : 'Modifica'}</button>
-            {record.kind === 'article' && !record.archived && <button type="button" className="button secondary" disabled={busy}
-              onClick={() => openView({ movementFor: record.id })}><Boxes size={15}/> Carico / scarico</button>}
-            {isVehicle && record.status === 'active' && !record.archived &&
-              <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli?veicolo=' + record.id, identity)}>
-                <Truck size={15}/> {maintenanceState === 'active' ? 'Assegna per altre date' : 'Assegna'}
-              </Link>}
-            <button className="button text-button" disabled={busy} onClick={() => {
-              void persist({ action: record.archived ? 'restore' : 'archive', id: record.id, kind: record.kind })
-                .catch(error => {
-                  setNotice({ text: error instanceof Error ? error.message : 'Operazione non riuscita.', error: true });
-                  focusNotice();
-                });
-            }}>{record.archived ? <RotateCcw size={15}/> : <Archive size={15}/>}
-              {record.archived ? 'Ripristina' : 'Archivia'}</button>
-          </div>
-        </li>;
+          </li>}
+        </ContextActions>;
       })}</ul> : <div className={styles.empty}>
         <Package size={29}/>
         <strong>{hasFilters ? 'Nessun risultato' : archive ? 'Nessuna scheda archiviata' : 'Nessuna scheda'}</strong>
@@ -325,6 +391,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
       identity={identity} sites={availableSites} articles={articles} movementFor={movementFor}
       selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}
       onSiteCreated={site => setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)])}/>}
+    {trash.feedback}
   </Shell>;
 }
 
@@ -380,6 +447,12 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
   const hint = definition.totals?.(fields, lines.map(line => line.fields));
   const readOnly = Boolean(record?.archived);
   const isVehicle = definition.kind === 'article' && fields.category === 'vehicles';
+  const attendancePerson = record && (record.kind === 'employee' || record.kind === 'worker') ? record : null;
+  const personChanged = attendancePerson && (
+    title !== attendancePerson.title || status !== attendancePerson.status || date !== (attendancePerson.record_date ?? '')
+    || site !== (attendancePerson.site_id ?? '') || definition.fields.some(field =>
+      fields[field.key] !== (attendancePerson.fields[field.key] ?? field.initial ?? ''))
+  );
 
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   useEffect(() => {
@@ -428,7 +501,19 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
 
   return <><Drawer title={readOnly ? record!.title : (record ? 'Modifica ' : 'Aggiungi ') + subject} onClose={onClose} busy={busy}>
     <form className="editor-form" onSubmit={submit}>
-      <div className="drawer-fields">
+      <div className={attendancePerson ? `drawer-fields ${styles.personDrawerFields}` : 'drawer-fields'}>
+        {attendancePerson && <div className={styles.attendanceAction}>
+          {personChanged || busy ? <p role="status">Salva o annulla le modifiche per consultare {attendancePerson.kind === 'worker' ? 'presenze e scadenze' : 'le presenze'}.</p>
+            : <>
+              <Link className="button secondary" href={attendanceHref(identity, attendancePerson.id)}>
+                <CalendarCheck size={17} aria-hidden="true"/> Consulta presenze
+              </Link>
+              {attendancePerson.kind === 'worker' &&
+                <Link className={`button secondary ${styles.deadlineLink}`} href={workerDeadlinesHref(identity, attendancePerson.id)}>
+                  <CalendarClock size={17} aria-hidden="true"/> Visite, certificazioni e scadenze
+                </Link>}
+            </>}
+        </div>}
         <fieldset className={`form-grid ${styles.editorFields}`} disabled={busy || readOnly}>
           <label>{definition.titleLabel}<input autoFocus maxLength={160} required value={title} onChange={event => setTitle(event.target.value)}/></label>
           <div className={definition.statuses.length > 1 && definition.dateLabel ? 'form-pair' : undefined}>

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { romeDate, type Job, type JobKind, type SiteState } from './domain.ts';
+import { calendarRange } from './calendar.ts';
+import { plusDays, romeDate, type Job, type JobKind, type SiteState } from './domain.ts';
 import type { QuoteSummary } from './estimate-pricing.ts';
 import { documentTotals } from './operation-documents.ts';
 import { getWarehouseAvailability, isBelowMinimum } from './operation-resources.ts';
@@ -80,9 +81,12 @@ function addFinancials(money: Financials, direction: Direction, invoice: ReportI
   }
 }
 
+function monthNumber(date: string) {
+  return Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1;
+}
+
 function monthlyBalances({ from, to }: ReportFilters) {
   const months = new Map<string, Balance>();
-  const monthNumber = (date: string) => Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1;
   const first = monthNumber(from);
   const last = monthNumber(to);
   // Wide ranges retain every month with activity without allocating empty buckets for centuries.
@@ -94,6 +98,66 @@ function monthlyBalances({ from, to }: ReportFilters) {
     months.set(`${year}-${month}`, emptyBalance());
   }
   return { months, monthlyOmittedEmpty };
+}
+
+type ActivityGranularity = 'day' | 'week' | 'month' | 'year';
+
+function trendGranularity({ from, to }: ReportFilters): ActivityGranularity {
+  const days = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86_400_000 + 1;
+  if (days <= 14) return 'day';
+  if (days <= 70) return 'week';
+  if (monthNumber(to) - monthNumber(from) < 24) return 'month';
+  return 'year';
+}
+
+function trendPeriod(date: string, granularity: ActivityGranularity) {
+  switch (granularity) {
+    case 'day': return { key: date, from: date, to: date };
+    case 'week': {
+      const { from, to } = calendarRange({ view: 'settimana', date });
+      return { key: from, from, to };
+    }
+    case 'month': {
+      const key = date.slice(0, 7);
+      const from = key + '-01';
+      const end = new Date(from + 'T00:00:00Z');
+      end.setUTCMonth(end.getUTCMonth() + 1, 0);
+      return { key, from, to: end.toISOString().slice(0, 10) };
+    }
+    case 'year': {
+      const key = date.slice(0, 4);
+      return { key, from: key + '-01-01', to: key + '-12-31' };
+    }
+  }
+}
+
+type ActivityPoint = ReturnType<typeof trendPeriod> & { total: number; completed: number; overdue: number };
+
+function activityBuckets(filters: ReportFilters) {
+  const granularity = trendGranularity(filters);
+  const omittedEmpty = granularity === 'year' && Number(filters.to.slice(0, 4)) - Number(filters.from.slice(0, 4)) >= 24;
+  const points = new Map<string, ActivityPoint>();
+  function pointAt(date: string) {
+    const { key, from, to } = trendPeriod(date, granularity);
+    const existing = points.get(key);
+    if (existing) return existing;
+    const point = {
+      key, from: from < filters.from ? filters.from : from, to: to > filters.to ? filters.to : to,
+      total: 0, completed: 0, overdue: 0,
+    };
+    points.set(key, point);
+    return point;
+  }
+
+  if (!omittedEmpty) {
+    let date = filters.from;
+    while (date <= filters.to) {
+      const { to } = pointAt(date);
+      if (to === filters.to) break;
+      date = plusDays(to, 1);
+    }
+  }
+  return { pointAt, points, granularity, omittedEmpty };
 }
 
 function makeSite(id: string, site?: ReportSite) {
@@ -128,6 +192,7 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   const siteRows = new Map(sites.map(site => [site.id, makeSite(site.id, site)]));
   const unassigned = makeSite('');
   const { months, monthlyOmittedEmpty } = monthlyBalances(filters);
+  const trend = activityBuckets(filters);
   const summary = { ...emptyFinancials(), collected: 0n, paid: 0n, drafts: 0, incomplete: 0, missingPaidDate: 0 };
   const invoices: ReportInvoice[] = [];
   const settledInvoices: ReportInvoice[] = [];
@@ -186,11 +251,18 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   }
 
   for (const job of new Map(data.jobs.map(job => [job.id, job])).values()) {
-    if (!inSite(job.site_id) || !inPeriod(job.due_date)) continue;
+    if (!inSite(job.site_id) || !inPeriod(job.due_date) || !validDate(job.due_date)) continue;
     activity.jobs += 1;
     jobsByKind[job.kind] += 1;
-    if (job.status === 'done') activity.jobsCompleted += 1;
-    else if (job.due_date < today) activity.jobsOverdue += 1;
+    const point = trend.pointAt(job.due_date);
+    point.total += 1;
+    if (job.status === 'done') {
+      activity.jobsCompleted += 1;
+      point.completed += 1;
+    } else if (job.due_date < today) {
+      activity.jobsOverdue += 1;
+      point.overdue += 1;
+    }
     const siteRow = siteRows.get(job.site_id);
     if (siteRow) siteRow.jobCount += 1;
   }
@@ -224,6 +296,10 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   settledInvoices.sort((a, b) => (b.paidDate ?? '').localeCompare(a.paidDate ?? '') || a.title.localeCompare(b.title, 'it'));
 
   const monthly = [...months].sort(([a], [b]) => a.localeCompare(b)).map(([month, balance]) => ({ month, ...balance }));
+  const activityTrend = {
+    granularity: trend.granularity, omittedEmpty: trend.omittedEmpty,
+    points: [...trend.points.values()].sort((a, b) => a.key.localeCompare(b.key)),
+  };
   return { filters, summary, monthly, monthlyOmittedEmpty,
-    sites: sortedSites, invoices, settledInvoices, activity };
+    sites: sortedSites, invoices, settledInvoices, activity, activityTrend };
 }

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { compareJobs, formatDate, jobLabels, kindLabels, type AgendaItem } from '@/lib/domain';
+import { interventionMenuLabel } from './agenda-row';
+import { ContextActions, type ContextAction } from './context-actions';
 import styles from './calendar-grid.module.css';
 
 type CalendarProps = {
@@ -16,6 +18,7 @@ type CalendarProps = {
   canCreate: boolean;
   onCreate: (date: string, time?: string) => void;
   onEdit: (event: AgendaItem) => void;
+  actionsFor: (event: AgendaItem) => ContextAction[];
 };
 
 const hours = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
@@ -37,8 +40,8 @@ function addLabel(dayLabel: string, hour?: string) {
   return `Aggiungi intervento il ${dayLabel}${hour ? ` alle ${hour}:00` : ''}`;
 }
 
-function CalendarEvent({ item, onEdit, compact = false }: {
-  item: AgendaItem; onEdit: CalendarProps['onEdit']; compact?: boolean;
+function CalendarEvent({ item, onEdit, actionsFor, compact = false }: {
+  item: AgendaItem; onEdit: CalendarProps['onEdit']; actionsFor: CalendarProps['actionsFor']; compact?: boolean;
 }) {
   const time = eventTime(item);
   const label = eventLabel(item);
@@ -48,16 +51,21 @@ function CalendarEvent({ item, onEdit, compact = false }: {
     'Modifica intervento', compact ? detail : '',
     item.status !== 'done' ? jobLabels[item.status] : '',
   ].filter(Boolean).join(' · ');
-  return <button type="button" className={`${styles.event} ${compact ? styles.compactEvent : ''}`}
-    data-kind={item.kind} data-status={item.status} title={label} onClick={() => onEdit(item)}>
-    {time && <time className={styles.eventTime} dateTime={`${item.due_date}T${time}`}>{time}</time>}
-    <span className={styles.eventSite}>{item.site.name}</span>
-    {!compact && <span className={styles.eventDetail}>{detail}</span>}
-    <span className="sr-only">{assistiveText}</span>
-  </button>;
+  return <ContextActions label={interventionMenuLabel(item, item.site.name)} actions={actionsFor(item)} compact={compact}>
+    {({ surface, trigger }) => <div {...surface} className={`${styles.eventActions} ${compact ? styles.compactEventActions : ''}`}>
+      <button type="button" className={`${styles.event} ${compact ? styles.compactEvent : ''}`} data-context-primary
+        data-kind={item.kind} data-status={item.status} title={label} onClick={() => onEdit(item)}>
+        {time && <time className={styles.eventTime} dateTime={`${item.due_date}T${time}`}>{time}</time>}
+        <span className={styles.eventSite}>{item.site.name}</span>
+        {!compact && <span className={styles.eventDetail}>{detail}</span>}
+        <span className="sr-only">{assistiveText}</span>
+      </button>
+      {trigger}
+    </div>}
+  </ContextActions>;
 }
 
-function MonthGrid({ days, date, today, dayHref, canCreate, onCreate, onEdit, jobs }: CalendarProps & {
+function MonthGrid({ days, date, today, dayHref, canCreate, onCreate, onEdit, actionsFor, jobs }: CalendarProps & {
   jobs: Map<string, AgendaItem[]>;
 }) {
   return <section className={styles.month} aria-label="Calendario mensile">
@@ -80,7 +88,7 @@ function MonthGrid({ days, date, today, dayHref, canCreate, onCreate, onEdit, jo
               title={createLabel} onClick={() => onCreate(day)}><Plus size={15}/></button>}
           </div>
           <div className={styles.monthEvents}>
-            {entries.slice(0, monthEventLimit).map(item => <CalendarEvent key={item.id} item={item} onEdit={onEdit} compact/>)}
+            {entries.slice(0, monthEventLimit).map(item => <CalendarEvent key={item.id} item={item} onEdit={onEdit} actionsFor={actionsFor} compact/>)}
             {more > 0 && <Link href={dayHref(day)} prefetch={false} className={styles.more}
               aria-label={`+${more} ${more === 1 ? 'altro intervento' : 'altri interventi'} il ${fullDay}`}>
               +{more}<span> {more === 1 ? 'altro' : 'altri'}</span>
@@ -96,22 +104,22 @@ function slotKey(day: string, hour?: string) {
   return `${day}/${hour ?? ''}`;
 }
 
-function TimeSlot({ day, dayLabel, hour, entries, canCreate, keyboardSlot, onSlotFocus, onCreate, onEdit }: {
+function TimeSlot({ day, dayLabel, hour, entries, canCreate, keyboardSlot, onSlotFocus, onCreate, onEdit, actionsFor }: {
   day: string; dayLabel: string; hour?: string; entries?: AgendaItem[]; canCreate: boolean;
   keyboardSlot: string; onSlotFocus: (key: string) => void;
-  onCreate: CalendarProps['onCreate']; onEdit: CalendarProps['onEdit'];
+  onCreate: CalendarProps['onCreate']; onEdit: CalendarProps['onEdit']; actionsFor: CalendarProps['actionsFor'];
 }) {
   const label = addLabel(dayLabel, hour);
   const key = slotKey(day, hour);
   return <div className={styles.timeSlot} data-date={day} data-hour={hour} data-has-events={!!entries?.length}>
-    {entries?.map(item => <CalendarEvent key={item.id} item={item} onEdit={onEdit}/>)}
+    {entries?.map(item => <CalendarEvent key={item.id} item={item} onEdit={onEdit} actionsFor={actionsFor}/>)}
     {canCreate && <button type="button" className={styles.slotAdd} aria-label={label} title={label}
       data-calendar-slot={key} tabIndex={key === keyboardSlot ? 0 : -1} onFocus={() => onSlotFocus(key)}
       onClick={() => onCreate(day, hour ? `${hour}:00` : undefined)}><Plus size={15}/></button>}
   </div>;
 }
 
-function ScheduleGrid({ view, date, today, days, items, dayHref, canCreate, onCreate, onEdit }: CalendarProps) {
+function ScheduleGrid({ view, date, today, days, items, dayHref, canCreate, onCreate, onEdit, actionsFor }: CalendarProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLDivElement>(null);
   const firstRow = useRef<HTMLDivElement>(null);
@@ -171,7 +179,7 @@ function ScheduleGrid({ view, date, today, days, items, dayHref, canCreate, onCr
 
   const slot = (day: string, hour?: string) => <TimeSlot key={day} day={day} dayLabel={dayLabels.get(day) ?? day} hour={hour}
     entries={slots.get(slotKey(day, hour))} canCreate={canCreate} keyboardSlot={keyboardSlot}
-    onSlotFocus={key => setFocusedSlot({date, view, key})} onCreate={onCreate} onEdit={onEdit}/>;
+    onSlotFocus={key => setFocusedSlot({date, view, key})} onCreate={onCreate} onEdit={onEdit} actionsFor={actionsFor}/>;
 
   return <div ref={scroller} className={`${styles.scheduleScroll} ${week ? styles.week : styles.day}`}
     role="region" aria-label={week ? 'Calendario settimanale' : 'Calendario del giorno'} tabIndex={0}

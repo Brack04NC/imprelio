@@ -17,7 +17,7 @@
 .actions button[type=submit] { color: white; background: #9a2a26; }
 .actions button[type=submit]:hover { background: #7f201c; }
 
-.notifications {
+.notifications, .host {
   position: fixed;
   z-index: 10;
   inset-inline-end: 18px;
@@ -27,6 +27,8 @@
   gap: 8px;
   pointer-events: none;
 }
+.host:empty { display: none; }
+.host .notifications { position: static; width: auto; }
 
 .toast {
   display: grid;

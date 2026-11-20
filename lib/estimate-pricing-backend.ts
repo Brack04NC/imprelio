@@ -17,11 +17,12 @@ export async function readRates(db: Database, org: string) {
   }
 }
 
-async function readQuotes(db: Database, org: string, site?: string) {
+export async function readQuotes(db: Database, org: string, { site, since }: { site?: string; since?: string } = {}) {
   const quotes: QuoteSummary[] = [];
   for (let offset = 0; ; offset += size) {
     let query = db.from('estimate_quotes').select('id,site_id,title,source_name,created_at').eq('organization_id', org);
     if (site) query = query.eq('site_id', site);
+    if (since) query = query.gte('created_at', since);
     const { data, error } = await query.order('created_at', { ascending: false }).order('id').range(offset, offset + size - 1);
     if (error) throw error;
     quotes.push(...data as QuoteSummary[]);
@@ -30,6 +31,6 @@ async function readQuotes(db: Database, org: string, site?: string) {
 }
 
 export async function readPricing(db: Database, org: string, site?: string) {
-  const [rates, quotes] = await Promise.all([readRates(db, org), readQuotes(db, org, site)]);
+  const [rates, quotes] = await Promise.all([readRates(db, org), readQuotes(db, org, { site })]);
   return { rates, quotes };
 }

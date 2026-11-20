@@ -1,27 +1,34 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { Building2, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
+import { Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
 import { areas } from '@/lib/operation-types';
+import { NotificationBell } from './notification-bell';
+import trashStyles from './trash-removal.module.css';
 
 const modules = [
   { section: 'clienti', label: 'Clienti', href: '/clienti', icon: Building2 },
   { section: 'magazzino', label: areas.magazzino.title, href: '/gestione/magazzino', icon: Warehouse },
   { section: 'personale', label: areas.personale.title, href: '/gestione/personale', icon: Users },
+  { section: 'presenze', label: 'Presenze', href: '/gestione/presenze', icon: CalendarCheck },
   { section: 'amministrazione', label: areas.amministrazione.title, href: '/gestione/amministrazione', icon: FileText },
   { section: 'computi-metrici', label: areas['computi-metrici'].title, href: '/gestione/computi-metrici', icon: Calculator },
   { section: 'preventivi-computo', label: 'Preventivi da PDF', href: '/gestione/preventivi-computo', icon: FileUp },
   { section: 'statistiche', label: 'Statistiche', href: '/gestione/statistiche', icon: ChartNoAxesCombined },
   { section: 'bilanci', label: 'Bilanci e conti', href: '/gestione/bilanci', icon: Wallet },
+  { section: 'cestino', label: 'Cestino', href: '/gestione/cestino', icon: Trash2 },
 ] as const;
-type ShellSection = 'cantieri' | 'agenda' | 'accessi' | typeof modules[number]['section'];
+type ShellSection = 'cantieri' | 'agenda' | 'notifiche' | 'accessi' | typeof modules[number]['section'];
 
 export function orgLink(path: string, identity: Identity) {
   if (identity.orgs.length < 2) return path;
-  return path + (path.includes('?') ? '&' : '?') + 'azienda=' + identity.org.id;
+  const hash = path.indexOf('#');
+  const url = hash < 0 ? path : path.slice(0, hash);
+  return url + (url.includes('?') ? '&' : '?') + 'azienda=' + identity.org.id + (hash < 0 ? '' : path.slice(hash));
 }
 
 export function Shell({ identity, section, detail, onSearch, children }: {
@@ -63,13 +70,14 @@ export function Shell({ identity, section, detail, onSearch, children }: {
   const initials = identity.name.split(/[ ._-]+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'IM';
   const overview = orgLink('/cantieri', identity);
   const agenda = orgLink('/agenda', identity);
+  const notifications = orgLink('/notifiche', identity);
   const access = orgLink('/accessi', identity);
   const sectionLabel = section === 'cantieri' ? 'Cantieri' : section === 'agenda' ? 'Agenda'
-    : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
+    : section === 'notifiche' ? 'Notifiche' : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
   function sidebar() {
     return <>
       <Link href={overview} className="brand" onClick={() => mobile.current?.close()}>
-        <span className="brand-icon"><Building2 size={23} strokeWidth={2.1}/></span>
+        <Image src="/brand/imprelio-simbolo-originale.png" alt="" width={44} height={44} className="brand-icon" unoptimized/>
         <span>Imprelio<small>Gestione cantieri</small></span>
       </Link>
       <nav className="nav-main" aria-label="Menu principale">
@@ -77,6 +85,8 @@ export function Shell({ identity, section, detail, onSearch, children }: {
         <Link href={overview} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
         <Link href={agenda} onClick={() => mobile.current?.close()} aria-current={section === 'agenda' ? 'page' : undefined}
           className={'nav-link ' + (section === 'agenda' ? 'nav-active' : '')}><CalendarDays size={18} /> Agenda</Link>
+        <Link href={notifications} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'notifiche' ? 'page' : undefined}
+          className={'nav-link ' + (section === 'notifiche' ? 'nav-active' : '')}><Bell size={18} aria-hidden="true"/> Notifiche</Link>
         {identity.org.role === 'admin' && <Link href={access} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
         <p className="nav-label roadmap-label">GESTIONE</p>
         {modules.map(({ section: page, label, href, icon: Icon }) => <Link key={page} href={orgLink(href, identity)}
@@ -113,6 +123,7 @@ export function Shell({ identity, section, detail, onSearch, children }: {
           <Link ref={searchLink} className="global-search" aria-keyshortcuts="Control+K Meta+K" href={orgLink('/cantieri?cerca=1', identity)} onClick={event => {
             if (onSearch && !event.metaKey && !event.ctrlKey && !event.shiftKey) { event.preventDefault(); onSearch(); }
           }}><Search size={17} aria-hidden="true"/><span className="search-caption">Cerca cantieri</span><kbd aria-hidden="true">{shortcutLabel}</kbd></Link>
+          <NotificationBell key={identity.org.id} identity={identity}/>
           <details ref={profile} className="profile" onBlur={event => {
             if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
           }} onKeyDown={event => {
@@ -133,6 +144,7 @@ export function Shell({ identity, section, detail, onSearch, children }: {
         </div>
       </header>
       <main id="contenuto" tabIndex={-1} className="content">{children}</main>
+      <div className={trashStyles.host} id="trash-notifications"/>
     </div>
   </div>;
 }

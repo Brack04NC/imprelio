@@ -2,6 +2,7 @@ import { demoSeed, getDemo } from './demo.ts';
 import { getWarehouseAvailability } from './operation-resources.ts';
 import { areas, operationKinds, type OperationArea, type OperationKind, type OperationRecord, type OperationWrite, type SiteOption } from './operation-types.ts';
 import { plusDays } from './domain.ts';
+import { demoTombstoneIds } from './trash-storage.ts';
 
 export const operationsKey = 'imprelio-operations-v1';
 const id = (n: number) => '30638ab7-70df-485d-81da-' + String(n).padStart(12, '0');
@@ -14,7 +15,7 @@ export function operationSamples(today: string): OperationRecord[] {
   });
   return [
     sample(1, 'article', 'Telaio ponteggio 105', 'active', null, { code: 'MAT-001', category: 'materials', unit: 'pz', stock_min: '20', location: 'Deposito A' }, [], null),
-    sample(2, 'article', 'Autocarro con gru', 'active', null, { code: 'VEI-002', category: 'vehicles', unit: 'pz', stock_min: '1', location: 'Piazzale' }, [], null),
+    sample(2, 'article', 'Autocarro con gru', 'active', null, { code: 'VEI-002', category: 'vehicles', unit: 'pz', stock_min: '1', location: 'Piazzale', revision_due_on: plusDays(today, 12) }, [], null),
     sample(3, 'movement', 'Carico iniziale telai', 'recorded', null, { article_id: id(1), direction: 'in', quantity: '120' }, [], plusDays(today, -2)),
     sample(4, 'movement', 'Telai per facciata nord', 'recorded', site, { article_id: id(1), direction: 'out', quantity: '36' }),
     sample(5, 'movement', 'Registrazione autocarro', 'recorded', null, { article_id: id(2), direction: 'in', quantity: '1' }),
@@ -50,7 +51,7 @@ function isTextObject(value: unknown) {
     && Object.values(value).every(member => typeof member === 'string');
 }
 
-function demoOperations(today: string) {
+export function demoOperationsBacking(today: string) {
   try {
     const stored = localStorage.getItem(operationsKey);
     const data: unknown = stored ? JSON.parse(stored) : null;
@@ -65,7 +66,8 @@ export function forArea(records: OperationRecord[], area: OperationArea) {
 }
 
 export function localOperations(today: string, area: OperationArea) {
-  return forArea(demoOperations(today), area);
+  const deleted = demoTombstoneIds('operation');
+  return forArea(demoOperationsBacking(today), area).filter(record => !deleted.has(record.id));
 }
 
 export function demoSiteOptions(today: string, persisted = false): SiteOption[] {
@@ -77,7 +79,9 @@ export function demoSiteOptions(today: string, persisted = false): SiteOption[] 
 }
 
 export function updateLocalOperation(today: string, action: OperationWrite) {
-  const records = demoOperations(today);
+  const deleted = demoTombstoneIds('operation');
+  if (deleted.has(action.id)) throw new Error('La scheda è nel cestino. Ripristinala prima di modificarla.');
+  const records = demoOperationsBacking(today);
   const old = records.find(record => record.id === action.id);
   if ((old && old.kind !== action.kind) || (!old && action.action !== 'save'))
     throw new Error('Questa scheda non è più disponibile.');
@@ -94,13 +98,14 @@ export function updateLocalOperation(today: string, action: OperationWrite) {
   }
 
   const next = [value, ...records.filter(record => record.id !== value.id)];
-  if (value.kind === 'article' && value.archived && next.some(record =>
+  const visible = next.filter(record => !deleted.has(record.id));
+  if (value.kind === 'article' && value.archived && visible.some(record =>
     record.kind === 'movement' && !record.archived && record.fields.article_id === value.id))
     throw new Error('Archivia prima i movimenti di questo articolo.');
   if (value.kind === 'movement') {
-    if (!value.archived && !next.some(record => record.kind === 'article' && !record.archived && record.id === value.fields.article_id))
+    if (!value.archived && !visible.some(record => record.kind === 'article' && !record.archived && record.id === value.fields.article_id))
       throw new Error('L’articolo selezionato non è più disponibile.');
-    if ([...getWarehouseAvailability(next).values()].some(balance => balance < 0n))
+    if ([...getWarehouseAvailability(visible).values()].some(balance => balance < 0n))
       throw new Error('La modifica porterebbe la giacenza sotto zero.');
   }
   localStorage.setItem(operationsKey, JSON.stringify(next));

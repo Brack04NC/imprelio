@@ -129,3 +129,47 @@ test('Filtra attività e fatture per cantiere mantenendo le scorte aziendali', (
   assert.equal(company.activity.vehiclesAssigned, 2);
   assert.equal(buildBusinessReport({ ...data, assignments: null }, period, today).activity.vehiclesAssigned, null);
 });
+
+test('L’andamento raggruppa gli interventi filtrati nelle settimane incluse nel periodo', () => {
+  const job = (id, due_date, status, site_id = siteA) => ({ id, due_date, status, site_id, kind: 'assembly' });
+  const completed = job('Montaggio', '2026-02-27', 'done');
+  const data = { sites, records: [], quotes: [], assignments: null, jobs: [
+    completed, completed, job('In ritardo', '2026-03-05', 'progress'), job('Oggi', today, 'scheduled'),
+    job('Altro cantiere', '2026-03-14', 'scheduled', siteB), job('Fuori periodo', '2026-02-26', 'done'),
+    job('Data impossibile', '2026-02-29', 'scheduled'),
+  ] };
+  const report = buildBusinessReport(data, { site: siteA, from: '2026-02-27', to: '2026-03-17' }, today);
+  assert.deepEqual(report.activityTrend, {
+    granularity: 'week', omittedEmpty: false, points: [
+      { key: '2026-02-23', from: '2026-02-27', to: '2026-03-01', total: 1, completed: 1, overdue: 0 },
+      { key: '2026-03-02', from: '2026-03-02', to: '2026-03-08', total: 1, completed: 0, overdue: 1 },
+      { key: '2026-03-09', from: '2026-03-09', to: '2026-03-15', total: 1, completed: 0, overdue: 0 },
+      { key: '2026-03-16', from: '2026-03-16', to: '2026-03-17', total: 0, completed: 0, overdue: 0 },
+    ],
+  });
+  assert.equal(report.activity.jobs, 3);
+  const daily = buildBusinessReport(data, { site: siteA, from: '2026-03-14', to: today }, today);
+  assert.equal(daily.activityTrend.granularity, 'day');
+  assert.deepEqual(daily.activityTrend.points.map(point => point.total), [0, 1]);
+});
+
+test('L’andamento include il mese bisestile e tratta gli estremi dei periodi molto ampi', () => {
+  const job = (due_date, status) => ({ id: due_date, due_date, status, site_id: siteA, kind: 'assembly' });
+  const data = { sites, records: [], quotes: [], assignments: null, jobs: [
+    job('0001-01-01', 'done'), job('2024-02-29', 'done'), job('9999-12-31', 'scheduled'),
+  ] };
+  const monthly = buildBusinessReport(data, { site: '', from: '2024-01-18', to: '2024-04-02' }, today);
+  assert.equal(monthly.activityTrend.granularity, 'month');
+  assert.deepEqual(monthly.activityTrend.points.map(({ from, to, total }) => [from, to, total]), [
+    ['2024-01-18', '2024-01-31', 0], ['2024-02-01', '2024-02-29', 1],
+    ['2024-03-01', '2024-03-31', 0], ['2024-04-01', '2024-04-02', 0],
+  ]);
+  const wide = buildBusinessReport(data, { site: '', from: '0001-01-01', to: '9999-12-31' }, today);
+  assert.equal(wide.activityTrend.granularity, 'year');
+  assert.equal(wide.activityTrend.omittedEmpty, true);
+  assert.deepEqual(wide.activityTrend.points.map(({ key, total, overdue }) => [key, total, overdue]),
+    [['0001', 1, 0], ['2024', 1, 0], ['9999', 1, 0]]);
+  const finalWeeks = buildBusinessReport(data, { site: '', from: '9999-12-12', to: '9999-12-31' }, today);
+  assert.equal(finalWeeks.activityTrend.points.at(-1).to, '9999-12-31');
+  assert.equal(finalWeeks.activityTrend.points.at(-1).total, 1);
+});

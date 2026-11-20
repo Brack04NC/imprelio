@@ -2,18 +2,14 @@
 
 import { Trash2, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { Identity } from '@/lib/domain';
-import { writeDemoTrash } from '@/lib/trash-demo';
-import type { TrashAction } from '@/lib/trash';
+import { trashLabels, type TrashAction } from '@/lib/trash';
+import { persistTrash } from '@/lib/trash-client';
 import styles from './trash-removal.module.css';
 
 type RecordLabel = { id: string; label: string };
 type Removed = RecordLabel & { keyboard: boolean };
-
-const labels = {
-  intervention: { name: 'intervento', deleted: 'Intervento eliminato', restored: 'Intervento ripristinato' },
-  quote: { name: 'preventivo', deleted: 'Preventivo eliminato', restored: 'Preventivo ripristinato' },
-};
 
 export function useTrashRemoval(identity: Identity, { kind, onChange }: {
   kind: TrashAction['kind'];
@@ -23,7 +19,7 @@ export function useTrashRemoval(identity: Identity, { kind, onChange }: {
   const [removed, setRemoved] = useState<Removed[]>([]);
   const [announcement, setAnnouncement] = useState('');
   const opener = useRef<HTMLElement | null>(null);
-  const label = labels[kind];
+  const label = trashLabels[kind];
 
   function request(id: string, name: string, returnFocus?: HTMLElement | null, detail?: string) {
     opener.current = returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -36,42 +32,31 @@ export function useTrashRemoval(identity: Identity, { kind, onChange }: {
     requestAnimationFrame(() => { if (returnFocus?.isConnected) returnFocus.focus(); });
   }
 
-  async function persist(action: TrashAction['action'], id: string) {
-    if (identity.demo) {
-      writeDemoTrash({ action, kind, id });
-      return;
-    }
-    const response = await fetch('/api/cestino?' + new URLSearchParams({ azienda: identity.org.id }), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, kind, id }),
-    });
-    const result = await response.json().catch(() => null);
-    if (!response.ok || !result?.ok) throw new Error(result?.error ?? 'Operazione non riuscita. Riprova.');
-  }
-
   const dismiss = useCallback((id: string) => {
     setRemoved(current => current.filter(item => item.id !== id));
   }, []);
 
+  const toasts = removed.length > 0 ? <section className={styles.notifications} aria-label="Eliminazioni recenti">
+    {removed.map(item => <RemovalToast key={item.id} item={item} label={label.deleted} onDismiss={dismiss} onRestore={async () => {
+      await persistTrash(identity, { action: 'restore', kind, id: item.id });
+      dismiss(item.id);
+      setAnnouncement(label.restored + ' · ' + item.label);
+      onChange('restore', item.id);
+    }}/>)}
+  </section> : null;
+  const host = toasts && typeof document !== 'undefined' ? document.getElementById('trash-notifications') : null;
+
   const feedback = <>
     <p className="sr-only" role="status">{announcement}</p>
-    {target && <ConfirmRemoval item={target} name={label.name} onCancel={close} onConfirm={async keyboard => {
-      await persist('delete', target.id);
+    {target && <ConfirmRemoval item={target} name={label.singular} onCancel={close} onConfirm={async keyboard => {
+      await persistTrash(identity, { action: 'delete', kind, id: target.id });
       if (keyboard) setTarget(null);
       else close();
       setRemoved(current => [...current.filter(item => item.id !== target.id), { ...target, keyboard }]);
       setAnnouncement(label.deleted + ' · ' + target.label + '. Ripristina disponibile.');
       onChange('delete', target.id);
     }}/>}
-    {removed.length > 0 && <section className={styles.notifications} aria-label="Eliminazioni recenti">
-      {removed.map(item => <RemovalToast key={item.id} item={item} label={label.deleted} onDismiss={dismiss} onRestore={async () => {
-        await persist('restore', item.id);
-        dismiss(item.id);
-        setAnnouncement(label.restored + ' · ' + item.label);
-        onChange('restore', item.id);
-      }}/>)}
-    </section>}
+    {host ? createPortal(toasts, host) : toasts}
   </>;
 
   return { request, feedback };
@@ -110,7 +95,7 @@ function ConfirmRemoval({ item, name, onCancel, onConfirm }: {
     <form onSubmit={submit}>
       <h2 id={titleId}>Conferma eliminazione</h2>
       <div id={descriptionId} className={styles.description}>
-        <p>Vuoi eliminare {name === 'intervento' ? 'l’intervento' : 'il preventivo'} <strong>{item.label}</strong>?</p>
+        <p>Vuoi eliminare {name} <strong>{item.label}</strong>?</p>
         {item.detail && <p>{item.detail}</p>}
       </div>
       {error && <p role="alert" className="form-error">{error}</p>}

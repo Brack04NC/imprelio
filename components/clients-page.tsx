@@ -1,14 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowUpRight, Building2, ChevronRight, HardHat, Pencil, Plus, Search, Users } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, ArrowUpRight, Building2, ChevronRight, HardHat, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { clientSchema, demoClientDirectory, type ClientEntry } from '@/lib/client-directory';
-import { demoKey, getDemo } from '@/lib/demo';
+import { demoKey, getDemo, getDemoBacking } from '@/lib/demo';
 import { siteLabels, type Identity } from '@/lib/domain';
+import { demoTrashKey, isDemoTombstoned } from '@/lib/trash-storage';
 import { Drawer } from './editor';
 import { orgLink, Shell } from './shell';
+import { useTrashRemoval } from './trash-removal';
 import styles from './clients-page.module.css';
 
 const fields = [
@@ -28,6 +30,7 @@ function siteCount(count: number) {
 }
 
 export function ClientDirectory({ identity, initial, today }: { identity: Identity; initial: ClientEntry[]; today: string }) {
+  const router = useRouter();
   const params = useSearchParams();
   const [clients, setClients] = useState(initial);
   const [ready, setReady] = useState(!identity.demo);
@@ -49,6 +52,22 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
     .some(value => searchKey(value).includes(search))).sort((a, b) => a.name.localeCompare(b.name, 'it'));
   const selected = filtered.find(client => client.id === selectedParam)
     ?? (selectedParam && !search ? undefined : filtered[0]);
+  const trash = useTrashRemoval(identity, {
+    kind: 'client',
+    onChange(action, id) {
+      setNotice('');
+      if (action === 'delete' && selectedParam === id) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('cliente');
+        window.history.replaceState(null, '', url.pathname + url.search);
+      }
+      if (identity.demo) setClients(demoClientDirectory(getDemo(today)));
+      else {
+        if (action === 'delete') setClients(current => current.filter(client => client.id !== id));
+        router.refresh();
+      }
+    },
+  });
 
   useEffect(() => {
     if (!identity.demo) { setClients(initial); return; }
@@ -56,7 +75,7 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
       setClients(demoClientDirectory(getDemo(today)));
       setReady(true);
     }
-    function storage(event: StorageEvent) { if (event.key === demoKey || event.key === null) sync(); }
+    function storage(event: StorageEvent) { if (event.key === demoKey || event.key === demoTrashKey || event.key === null) sync(); }
     sync();
     window.addEventListener('storage', storage);
     window.addEventListener('pageshow', sync);
@@ -109,13 +128,14 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
     setNotice('');
     try {
       if (identity.demo) {
-        const store = getDemo(today);
+        if (isDemoTombstoned('client', profile.id)) throw new Error('Ripristina il cliente dal Cestino prima di modificarlo.');
+        const store = getDemoBacking(today);
         if (store.clients.some(client => client.id !== profile.id && client.name.toLowerCase() === profile.name.toLowerCase())) {
           throw new Error('Esiste già un cliente con questo nome.');
         }
         store.clients = [...store.clients.filter(client => client.id !== profile.id), profile];
         localStorage.setItem(demoKey, JSON.stringify(store));
-        setClients(demoClientDirectory(store));
+        setClients(demoClientDirectory(getDemo(today)));
       } else {
         const response = await fetch(`/api/clienti?azienda=${encodeURIComponent(identity.org.id)}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile),
@@ -178,7 +198,13 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
             <h2 id="client-detail-title" ref={title} tabIndex={-1}>{selected.name}</h2>
             {selected.contact_name && <p>{selected.contact_name}</p>}
           </div>
-          <button className="button secondary" onClick={event => openEditor(selected, event.currentTarget)}><Pencil size={16}/> Modifica</button>
+          <div className={styles.detailActions}>
+            <button type="button" className="button secondary" onClick={event => openEditor(selected, event.currentTarget)}><Pencil size={16} aria-hidden="true"/> Modifica</button>
+            <button type="button" className={`button secondary ${styles.deleteButton}`} onClick={event => trash.request(selected.id,
+              selected.name, event.currentTarget, selected.sites.length
+                ? 'Per eliminare questo cliente, sposta i cantieri collegati su un’altra anagrafica o eliminali.'
+                : undefined)}><Trash2 size={16} aria-hidden="true"/> Elimina cliente</button>
+          </div>
         </div>
         <button type="button" className={`button text-button ${styles.backToDirectory}`}
           onClick={() => (selectedButton.current ?? searchInput.current)?.focus()}><ArrowLeft size={16}/> Torna all’elenco clienti</button>
@@ -218,5 +244,6 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
         </footer>
       </form>
     </Drawer>}
+    {trash.feedback}
   </Shell>;
 }
