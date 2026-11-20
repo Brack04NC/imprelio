@@ -2,7 +2,7 @@
 
 import { Download, Printer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
 import { buildBusinessReport, type ReportData, type ReportFilters, type ReportSite } from '@/lib/business-reports';
 import { demoBusinessReportData } from '@/lib/business-reports-demo';
 import { downloadCsv } from '@/lib/csv-download';
@@ -27,11 +27,23 @@ export function ReportWorkspace({ identity, mode, initial, sites, filters, today
   const [pending, startTransition] = useTransition();
   const [local, setLocal] = useState<ReportData | null>(null);
   const [filterError, setFilterError] = useState('');
+  const scope = useRef<HTMLParagraphElement>(null);
+  const focusResult = useRef(false);
   const report = useMemo(() => local ? buildBusinessReport(local, filters, today) : initial, [local, filters, today, initial]);
   const options = local?.sites ?? sites;
   const selected = options.find(site => site.id === filters.site);
+  const missingSite = Boolean(filters.site && !selected);
+  const siteLabel = selected?.name ?? (missingSite ? 'Cantiere non disponibile' : '');
   const path = mode === 'balance' ? '/gestione/bilanci' : '/gestione/statistiche';
   const dateLabel = (date: string) => formatDate(date, { day: 'numeric', month: 'long', year: 'numeric' });
+
+  useEffect(() => { setFilterError(''); }, [filters.from, filters.to, filters.site]);
+
+  useEffect(() => {
+    if (pending || !focusResult.current) return;
+    focusResult.current = false;
+    scope.current?.focus({ preventScroll: true });
+  }, [pending, filters.from, filters.to, filters.site]);
 
   useEffect(() => {
     if (!identity.demo) return;
@@ -59,6 +71,11 @@ export function ReportWorkspace({ identity, mode, initial, sites, filters, today
     const params = new URLSearchParams({ dal, al });
     const cantiere = String(values.get('cantiere') ?? '');
     if (cantiere) params.set('cantiere', cantiere);
+    if (dal === filters.from && al === filters.to && cantiere === filters.site) {
+      scope.current?.focus({ preventScroll: true });
+      return;
+    }
+    focusResult.current = true;
     startTransition(() => router.push(orgLink(path + '?' + params, identity), { scroll: false }));
   }
 
@@ -66,7 +83,7 @@ export function ReportWorkspace({ identity, mode, initial, sites, filters, today
     const { summary, activity, monthly } = report;
     const euro = centsToEuroInput;
     downloadCsv('imprelio-riepilogo-' + filters.from + '.csv', [
-      ['Dal', filters.from, 'Al', filters.to, 'Cantiere', selected?.name ?? 'Tutti'],
+      ['Dal', filters.from, 'Al', filters.to, 'Cantiere', siteLabel || 'Tutti'],
       ['Indicatore', 'Valore'],
       ['Ricavi imponibili (EUR)', euro(summary.revenue)],
       ['Costi imponibili (EUR)', euro(summary.cost)],
@@ -118,23 +135,27 @@ export function ReportWorkspace({ identity, mode, initial, sites, filters, today
 
   return <section className={styles.report} aria-label="Riepilogo e resoconti">
     <div className={`panel ${styles.controls}`}>
-      <form className={styles.filters} onSubmit={applyFilters} key={`${filters.from}/${filters.to}/${filters.site}`}>
-        <label>Dal<input type="date" name="dal" defaultValue={filters.from} required/></label>
-        <label>Al<input type="date" name="al" defaultValue={filters.to} required/></label>
+      <form className={styles.filters} onSubmit={applyFilters} onChange={() => { if (filterError) setFilterError(''); }}
+        key={`${filters.from}/${filters.to}/${filters.site}/${missingSite}`}>
+        <label>Dal<input type="date" name="dal" defaultValue={filters.from} required
+          aria-invalid={filterError ? true : undefined} aria-describedby={filterError ? 'report-filter-error' : undefined}/></label>
+        <label>Al<input type="date" name="al" defaultValue={filters.to} required
+          aria-invalid={filterError ? true : undefined} aria-describedby={filterError ? 'report-filter-error' : undefined}/></label>
         <label><span id="report-site-label">Cantiere</span><select aria-labelledby="report-site-label" name="cantiere" defaultValue={filters.site}>
           <option value="">Tutti i cantieri</option>
+          {missingSite && <option value={filters.site} disabled>Cantiere non disponibile</option>}
           {options.map(site => <option key={site.id} value={site.id}>{site.name} · {site.city}</option>)}
         </select></label>
         <button type="submit" className="button primary" disabled={pending}>{pending ? 'Aggiornamento…' : 'Applica filtri'}</button>
       </form>
-      {filterError && <p className="form-error" role="alert">{filterError}</p>}
+      {filterError && <p className="form-error" id="report-filter-error" role="alert">{filterError}</p>}
       <div className={styles.exports}>
         <button type="button" className="button secondary" disabled={pending} onClick={exportSummary}><Download size={16}/> Riepilogo CSV</button>
         <button type="button" className="button secondary" disabled={pending || !report.invoices.length} onClick={exportInvoices}><Download size={16}/> Resoconto fatture CSV</button>
         <button type="button" className="button secondary" disabled={pending} onClick={() => window.print()}><Printer size={16}/> Stampa resoconto</button>
       </div>
     </div>
-    <p className={styles.scope}>{dateLabel(filters.from)} – {dateLabel(filters.to)}{selected && ' · ' + selected.name}</p>
+    <p className={styles.scope} ref={scope} tabIndex={-1}>{dateLabel(filters.from)} – {dateLabel(filters.to)}{siteLabel && ' · ' + siteLabel}</p>
     <div aria-busy={pending}><BusinessReportView mode={mode} report={report} filters={filters} today={today}/></div>
   </section>;
 }

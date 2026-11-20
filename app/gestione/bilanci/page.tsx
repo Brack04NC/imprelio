@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BookOpen, ReceiptText } from 'lucide-react';
 import { redirect } from 'next/navigation';
@@ -12,15 +13,25 @@ import { isFinanceMigrationMissing, readFinance } from '@/lib/finance-backend';
 import { operationSites } from '@/lib/operations-backend';
 import { demoSiteOptions } from '@/lib/operations-demo';
 
-export default async function Bilanci({ searchParams }: {
+type BilanciProps = {
   searchParams: Promise<{ azienda?: string; vista?: string; dal?: string; al?: string; cantiere?: string }>;
-}) {
+};
+
+export async function generateMetadata({ searchParams }: BilanciProps): Promise<Metadata> {
+  const { vista } = await searchParams;
+  return { title: vista === 'estratti' ? 'Estratti conto' : 'Bilancio gestionale' };
+}
+
+export default async function Bilanci({ searchParams }: BilanciProps) {
   const query = await searchParams;
   const { identity, db, signedIn } = await session(typeof query.azienda === 'string' ? query.azienda : null);
   if (!identity) redirect(signedIn ? '/login?errore=accesso' : '/login');
   const today = romeDate();
   const statement = query.vista === 'estratti';
   const scope = new URLSearchParams(identity.orgs.length > 1 ? { azienda: identity.org.id } : {});
+  for (const key of ['dal', 'al', 'cantiere'] as const) {
+    if (typeof query[key] === 'string') scope.set(key, query[key]);
+  }
   const balanceHref = '/gestione/bilanci' + (scope.size ? '?' + scope : '');
   scope.set('vista', 'estratti');
   const statementHref = '/gestione/bilanci?' + scope;

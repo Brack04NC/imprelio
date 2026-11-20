@@ -5,6 +5,7 @@ import { documentTotals } from './operation-documents.ts';
 import { getWarehouseAvailability, isBelowMinimum } from './operation-resources.ts';
 import type { OperationRecord, SiteOption } from './operation-types.ts';
 import { isSelectableAssignee, isSelectableVehicle, vehicleAssignmentState, type VehicleAssignment } from './vehicle-assignments.ts';
+import { vehicleMaintenance, vehicleMaintenanceState } from './vehicle-maintenance.ts';
 
 export type ReportSite = SiteOption & { status: SiteState };
 export type ReportJob = Pick<Job, 'id' | 'site_id' | 'kind' | 'due_date' | 'status'>;
@@ -200,11 +201,20 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   }
 
   if (data.assignments !== null) {
-    const vehicles = new Set(articles.filter(isSelectableVehicle).map(article => article.id));
+    const vehicles = new Set(articles.filter(article => {
+      if (!isSelectableVehicle(article)) return false;
+      const maintenance = vehicleMaintenance(article);
+      return !maintenance || vehicleMaintenanceState(maintenance, today) !== 'active';
+    }).map(article => article.id));
     const assignees = new Set(scopedRecords.filter(isSelectableAssignee).map(record => record.id));
-    const assigned = new Set(data.assignments.filter(assignment => vehicles.has(assignment.vehicle_id)
-      && assignees.has(assignment.assignee_id) && vehicleAssignmentState(assignment, today) === 'active')
-      .map(assignment => assignment.vehicle_id));
+    const siteIds = new Set(sites.map(site => site.id));
+    const assigned = new Set<string>();
+    for (const assignment of data.assignments) {
+      if (!vehicles.has(assignment.vehicle_id) || vehicleAssignmentState(assignment, today) !== 'active') continue;
+      const inScope = assignment.site_id ? siteIds.has(assignment.site_id)
+        : assignment.assignee_id && assignees.has(assignment.assignee_id);
+      if (inScope) assigned.add(assignment.vehicle_id);
+    }
     activity.vehiclesAssigned = assigned.size;
   }
 

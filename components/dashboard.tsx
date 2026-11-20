@@ -7,10 +7,12 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Building2, CalendarCheck, Calendar
 import { demoKey, demoWorkspace, getDemo, updateDemo } from '@/lib/demo';
 import { formatDate, jobLabels, kindLabels, PAGE_SIZE, parseWorkspaceParams, siteLabels, siteStates, type Action, type Identity, type Job, type Row, type Site, type Workspace } from '@/lib/domain';
 import { requestWorkspace } from '@/lib/client-api';
+import { isDemoTrashed } from '@/lib/trash-demo';
 import { Shell, orgLink } from './shell';
 import { Editor } from './editor';
 import { OperationLinks } from './operation-links';
 import { AgendaRow, jobIcons } from './agenda-row';
+import { useTrashRemoval } from '@/components/trash-removal';
 
 type EditorState = { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
 type AgendaPeriod = 'today' | 'week' | 'overdue';
@@ -58,6 +60,8 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   const [loading, setLoading] = useState(false);
   const startingKey = useRef(JSON.stringify(filters));
   const input = useRef<HTMLInputElement>(null);
+  const addSite = useRef<HTMLButtonElement>(null);
+  const addIntervention = useRef<HTMLButtonElement>(null);
   const agenda = useRef<HTMLElement>(null);
   const sites = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -67,6 +71,18 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   const period: AgendaPeriod = search.get('periodo') === 'ritardo' ? 'overdue' : search.get('periodo') === 'settimana' ? 'week' : 'today';
   const overview = '/cantieri';
   const current = workspace.current?.site.id === filters.siteId ? workspace.current : null;
+  const editedJob = editor?.type === 'job' ? editor.job : undefined;
+  const trash = useTrashRemoval(identity, {
+    kind: 'intervention', onChange: () => {
+      if (identity.demo) setWorkspace(demoWorkspace(getDemo(today), filters, today));
+      else setRevision(value => value + 1);
+    },
+  });
+  const detailName = current?.site.name;
+  const overviewQuery = new URLSearchParams(params);
+  for (const key of ['cantiere', 'nuovo', 'cliente', 'cerca']) overviewQuery.delete(key);
+  overviewQuery.set('vista', 'elenco');
+  const overviewHref = overview + '?' + overviewQuery;
 
   useEffect(() => {
     if (identity.demo) {
@@ -126,15 +142,8 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   }
 
   useEffect(() => {
-    function shortcut(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !editor) {
-        event.preventDefault();
-        focusSearch();
-      }
-    }
-    window.addEventListener('keydown', shortcut);
-    return () => window.removeEventListener('keydown', shortcut);
-  });
+    document.title = `${detailName ?? (filters.siteId ? 'Scheda cantiere' : 'Cantieri')} · Imprelio`;
+  }, [detailName, filters.siteId]);
 
   useEffect(() => {
     if (!newSiteRequested) return;
@@ -155,6 +164,10 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
     const key = pendingFocus.current;
     const target = key === 'search' ? input.current : key === 'agenda' ? agenda.current : key === 'sites' ? sites.current : key === 'detail' ? heading.current : null;
     if (target && target.offsetParent !== null) { target.focus(); pendingFocus.current = null; }
+    if (!editor && restoreFocus.current?.isConnected === false && document.activeElement === document.body) {
+      restoreFocus.current = null;
+      (addIntervention.current ?? agenda.current ?? addSite.current)?.focus();
+    }
   });
 
   function siteHref(id: string) {
@@ -168,17 +181,25 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
     window.history.pushState(null, '', href);
     window.scrollTo(0, 0);
   }
+  function returnToSites(href: string) {
+    pendingFocus.current = 'sites';
+    window.history.pushState(null, '', href);
+  }
   function openEditor(value: EditorState) {
     restoreFocus.current = document.activeElement as HTMLElement | null;
     setEditor(value);
   }
   function closeEditor() {
     setEditor(null);
-    requestAnimationFrame(() => restoreFocus.current?.isConnected && restoreFocus.current.focus());
+    const opener = restoreFocus.current;
+    requestAnimationFrame(() => (opener?.isConnected && opener !== document.body ? opener : addSite.current)?.focus());
   }
 
   async function persist(action: Action) {
     if (identity.demo) {
+      if ((action.action === 'job' || action.action === 'jobStatus') && isDemoTrashed('intervention', action.id)) {
+        throw new Error('L’intervento è nel cestino. Ripristinalo prima di modificarlo.');
+      }
       const next = updateDemo(getDemo(today), action);
       localStorage.setItem(demoKey, JSON.stringify(next));
       setWorkspace(demoWorkspace(next, filters, today));
@@ -225,7 +246,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
   return <Shell identity={identity} section="cantieri" detail={current?.site.name} onSearch={focusSearch}>
     {readError && <div className="load-error" role="alert">{readError}<button className="button secondary" onClick={() => setRevision(value => value + 1)}>Riprova</button></div>}
     {filters.siteId ? current ? <>
-      <SiteAnchor className="button text-button back-link" href={overview + (params ? '?' + params : '')} onOpen={href => { window.history.pushState(null, '', href); }}><ArrowLeft size={17}/> Tutti i cantieri</SiteAnchor>
+      <SiteAnchor className="button text-button back-link" href={overviewHref} onOpen={returnToSites}><ArrowLeft size={17}/> Tutti i cantieri</SiteAnchor>
       <section className="site-summary panel">
         <div className="site-heading">
           <span className="site-mark big"><Building2 size={25}/></span>
@@ -243,7 +264,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       </section>
       <section className="panel detail-agenda">
         <header className="panel-header"><div><h2>Interventi</h2><p>Programma i lavori per zona e aggiorna lo stato.</p></div>
-          <button className="button primary" onClick={() => openEditor({ type: 'job', site: current.site })}><Plus size={19}/> Aggiungi intervento</button>
+          <button ref={addIntervention} className="button primary" onClick={() => openEditor({ type: 'job', site: current.site })}><Plus size={19}/> Aggiungi intervento</button>
         </header>
         {current.jobs.length ? <ul className="detail-jobs">{current.jobs.map(job => {
           const Icon = jobIcons[job.kind];
@@ -264,7 +285,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       <OperationLinks identity={identity} site={current.site}/>
     </> : <div className="panel empty" role="status">
       {loading || (!identity.demo && workspace === initial && !readError) ? 'Caricamento cantiere…' : 'Cantiere non disponibile.'}
-      <SiteAnchor href={overview} onOpen={href => window.history.pushState(null, '', href)} className="button secondary">Torna ai cantieri</SiteAnchor>
+      <SiteAnchor href={overviewHref} onOpen={returnToSites} className="button secondary">Torna ai cantieri</SiteAnchor>
     </div> : <>
       <section className="hero" aria-labelledby="dashboard-title">
         <div className="hero-copy">
@@ -272,7 +293,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
           <h1 id="dashboard-title">Cantieri</h1>
           <p>Pianifica i lavori e segui i tuoi cantieri.</p>
         </div>
-        <button className="button hero-button" onClick={() => openEditor({ type: 'site' })}><Plus size={20}/> Nuovo cantiere</button>
+        <button ref={addSite} className="button hero-button" onClick={() => openEditor({ type: 'site' })}><Plus size={20}/> Nuovo cantiere</button>
       </section>
       <div className="metrics" aria-label="Riepilogo lavori">
         {[
@@ -288,7 +309,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       </nav>
       <div className={`dashboard-grid ${showingSites ? 'view-sites' : 'view-agenda'}`}>
         <section className="panel sites-panel" ref={sites} tabIndex={-1} aria-labelledby="sites-title">
-          <header className="panel-header"><div><h2 id="sites-title">Elenco cantieri</h2><p>{workspace.total} {workspace.total === 1 ? 'cantiere' : 'cantieri'}</p></div></header>
+          <header className="panel-header"><div><h2 id="sites-title">Elenco cantieri</h2><p role="status">{workspace.total} {workspace.total === 1 ? 'cantiere' : 'cantieri'}</p></div></header>
           <div className="table-tools">
             <div className="search-field"><Search size={18}/><input name="q" aria-label="Cerca per nome, cliente o comune" placeholder="Cerca per nome, cliente o comune…" autoComplete="off" maxLength={120} ref={input} value={draft} onChange={event => changeSearch(event.target.value)}/>
               {draft && <button className="icon-button inline" aria-label="Azzera ricerca" onClick={() => { changeSearch(''); input.current?.focus(); }}><X size={16}/></button>}
@@ -300,7 +321,10 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
               <thead><tr><th scope="col">Cantiere</th><th scope="col">Cliente</th><th scope="col">Stato</th><th scope="col">Prossimo</th><th scope="col"><span className="sr-only">Apri cantiere</span></th></tr></thead>
               <tbody>{workspace.rows.map(row => <SiteRow key={row.id} row={row} href={siteHref(row.id)} openSite={openSite} today={today}/>)}</tbody>
             </table> : <div className="empty"><HardHat size={26}/><strong>{filters.q || filters.status !== 'all' ? 'Nessun risultato' : 'Nessun cantiere'}</strong><p>{filters.q || filters.status !== 'all' ? 'Prova a cambiare ricerca o filtro.' : 'Crea un cantiere per programmare i lavori.'}</p>
-              {(filters.q || filters.status !== 'all') && <button className="button secondary" onClick={() => window.history.pushState(null, '', makeUrl(overview, { q: null, stato: null, pagina: null }))}>Azzera filtri</button>}
+              {(filters.q || filters.status !== 'all') && <button className="button secondary" onClick={() => {
+                pendingFocus.current = 'search';
+                window.history.pushState(null, '', makeUrl(overview, { q: null, stato: null, pagina: null }));
+              }}>Azzera filtri</button>}
             </div>}
           </div>
           <footer className="table-footer">
@@ -322,7 +346,13 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       </div>
       <OperationLinks identity={identity}/>
     </>}
-    {editor && <Editor editor={editor} clients={workspace.clients} today={today} onClose={closeEditor} save={save}/>}
+    {editor && <Editor editor={editor} clients={workspace.clients} today={today} onClose={closeEditor} save={save}
+      onDelete={editedJob && editor.type === 'job' ? () => {
+        setEditor(null);
+        setNotice(null);
+        trash.request(editedJob.id, [kindLabels[editedJob.kind], editor.site.name, editedJob.zone].filter(Boolean).join(' · '), restoreFocus.current);
+      } : undefined}/>}
+    {trash.feedback}
     {notice && <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.error ? <CircleAlert size={19}/> : <Check size={19}/>} {notice.text}<button className="icon-button" onClick={() => setNotice(null)} aria-label="Chiudi avviso"><X size={17}/></button></div>}
   </Shell>;
 }

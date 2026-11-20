@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ClientDirectory } from '@/components/clients-page';
@@ -6,6 +7,8 @@ import { session } from '@/lib/backend';
 import { demoClientDirectory, readClientDirectory } from '@/lib/client-directory';
 import { demoSeed } from '@/lib/demo';
 import { romeDate } from '@/lib/domain';
+
+export const metadata: Metadata = { title: 'Clienti' };
 
 export default async function Clienti({ searchParams }: { searchParams: Promise<{ azienda?: string }> }) {
   const { azienda } = await searchParams;

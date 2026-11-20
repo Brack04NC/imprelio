@@ -1,8 +1,11 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { BusinessReportSection } from '@/components/business-report-section';
 import { Shell } from '@/components/shell';
 import { session } from '@/lib/backend';
 import { romeDate } from '@/lib/domain';
+
+export const metadata: Metadata = { title: 'Statistiche' };
 
 export default async function Statistiche({ searchParams }: {
   searchParams: Promise<{ azienda?: string; dal?: string; al?: string; cantiere?: string }>;

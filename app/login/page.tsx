@@ -1,7 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, Building2 } from 'lucide-react';
 import { demoMode } from '@/lib/backend';
 import { signIn, signOut } from './actions';
+
+export const metadata: Metadata = { title: 'Accedi' };
 
 const messages: Record<string, string> = {
   accesso: 'Il tuo account non ha accesso a un’azienda. Contatta il tuo amministratore.',

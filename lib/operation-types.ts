@@ -41,7 +41,7 @@ export type Definition = {
   fields: Field[];
   lineFields?: Field[];
   minLines?: number;
-  summary?: (record: OperationRecord, records: OperationRecord[], stock: ReadonlyMap<string, bigint>) => string[];
+  summary?: (record: OperationRecord, records: OperationRecord[]) => string[];
   totals?: (fields: Values, lines: Values[]) => { label: string; value: string }[];
 };
 export type OperationWrite =

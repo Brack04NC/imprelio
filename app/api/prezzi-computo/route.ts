@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
   } catch (failure) {
     const code = (failure as { code?: string } | null)?.code;
     if (code === '23503') return json({ error: 'Il cantiere selezionato non è disponibile.' }, { status: 400 });
+    if (code === 'P0002') return json({ error: 'Il preventivo è stato eliminato.' }, { status: 409 });
     return json({ error: 'Salvataggio non riuscito. Riprova.' }, { status: 500 });
   }
 }

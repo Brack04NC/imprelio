@@ -1,6 +1,7 @@
 import 'server-only';
 import type { database } from './backend';
 import { areas, type OperationArea, type OperationRecord, type OperationWrite, type SiteOption } from './operation-types';
+import { maintenanceScheduleError, vehicleMaintenance } from './vehicle-maintenance';
 
 type Database = Awaited<ReturnType<typeof database>>;
 const pageSize = 500;
@@ -33,8 +34,16 @@ export async function operationSites(db: Database, organization: string): Promis
 }
 
 export async function writeOperation(db: Database, organization: string, action: OperationWrite) {
+  if (action.action === 'save' && vehicleMaintenance(action)) {
+    const { error } = await db.from('vehicle_assignments').select('site_id').eq('organization_id', organization).limit(0);
+    if (error && ['42703', '42P01', 'PGRST204', 'PGRST205'].includes(error.code)) {
+      throw new Error('Attiva la manutenzione con la migrazione 009 in Supabase.');
+    }
+    if (error) throw new Error('Impossibile verificare le assegnazioni. Riprova.');
+  }
   const { error } = await db.rpc('imprelio_operation_write', { org: organization, payload: action });
   if (!error) return;
+  if (error.code === '23P01' && error.message.includes('manutenzione')) throw new Error(maintenanceScheduleError);
   if (error.code === 'P0001') {
     if (error.message.includes('Stock insufficiente')) throw new Error('La modifica porterebbe la giacenza sotto zero.');
     if (error.message.includes('Articolo con movimenti attivi')) throw new Error('Archivia prima i movimenti di questo articolo.');

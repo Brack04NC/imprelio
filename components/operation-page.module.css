@@ -26,6 +26,7 @@
 .listHeading h2 { letter-spacing: -.035em; font-size: 22px; }
 .listActions { display: flex; flex-wrap: wrap; gap: 6px; }
 .filters { display: grid; grid-template-columns: minmax(140px,1.5fr) repeat(2, minmax(130px,1fr)); gap: 12px; margin-bottom: 18px; }
+.condensedFilters { grid-template-columns: minmax(140px,1.5fr) minmax(130px,1fr); }
 .filters label { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-weight: 630; font-size: 12px; }
 .filters select, .searchInput { min-height: 44px; border: 1px solid #d6dfed; border-radius: 8px; background: #fff; color: var(--ink); width: 100%; }
 .filters select { padding: 0 9px; }
@@ -39,17 +40,37 @@
 .recordIcon { width: 38px; height: 38px; border-radius: 9px; }
 .badge, .low { border-radius: 5px; background: #e9effb; color: #264989; padding: 4px 6px; font-size: 11px; font-weight: 680; }
 .low { align-self: flex-start; margin-top: 7px; color: #894514; background: #fff0df; }
+.maintenanceBadge { color: #894514; background: #fff0df; }
 .record h3 { overflow-wrap: anywhere; margin-bottom: 5px; font-size: 17px; letter-spacing: -.025em; }
 .record time, .summary { color: var(--muted); font-size: 12px; margin: 2px 0; overflow-wrap: anywhere; }
-.site { display: inline-flex; align-items: center; gap: 5px; color: var(--brand); font-weight: 620; min-height: 38px; margin: 2px 0; align-self: flex-start; }
+.stock { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 10px 0 0; }
+.stock div { padding: 8px; background: #eef3fa; border-radius: 8px; overflow-wrap: anywhere; }
+.stock dt { color: var(--muted); font-size: 11px; }
+.stock dd { margin: 4px 0 0; font-weight: 690; font-variant-numeric: tabular-nums; }
+.maintenanceCard { display: flex; align-items: flex-start; min-width: 0; gap: 8px; margin-top: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 12px; }
+.maintenanceCard strong, .maintenanceCard span { display: block; overflow-wrap: anywhere; }
+.maintenanceCard span { margin-top: 3px; }
+.maintenanceCard.active { color: #894514; background: #fff0df; border-color: #f2d8b9; }
+.maintenanceCard.scheduled { color: var(--brand); background: #eef3fa; }
+.maintenanceCard.past { background: #f7f9fd; }
+.linkedVehicle { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 12px; margin: 0 0 12px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #eef3fa; }
+.linkedVehicle span { padding-block: 6px; overflow-wrap: anywhere; }
+.site { display: inline-flex; align-items: center; gap: 5px; color: var(--brand); font-weight: 620; min-height: 38px; margin: 2px 0; align-self: flex-start; max-width: 100%; overflow-wrap: anywhere; }
 .site:hover { text-decoration: underline; }
 .recordActions { display: flex; margin-top: auto; padding-top: 11px; gap: 5px; flex-wrap: wrap; }
-.recordActions button { padding: 0 8px; }
+.recordActions button, .recordActions a { padding: 0 8px; }
 .empty { display: grid; min-height: 168px; place-content: center; justify-items: center; text-align: center; gap: 8px; color: var(--muted); }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .notice { padding: 8px 12px; margin: 0 0 12px; border-radius: 7px; background: #e7f5ee; color: #176346; }
+.editorError { margin-top: 12px; scroll-margin-block: 12px; }
 .editorFields { border: 0; margin: 0; padding: 0; }
 :global(.drawer):has(.editorFields) { width: min(660px,100%); }
+.maintenanceEditor { display: grid; min-width: 0; gap: 10px; padding: 8px 12px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fd; }
+.maintenanceEditor .maintenanceToggle { display: flex; min-height: 44px; align-items: center; gap: 9px; cursor: pointer; }
+.maintenanceEditor .maintenanceToggle input { flex: none; width: 19px; height: 19px; min-height: 0; padding: 0; margin: 0; accent-color: var(--brand); }
+.maintenanceEditor .maintenanceToggle:has(input:disabled) { cursor: default; }
+.maintenanceDates label { min-width: 0; }
+.maintenanceHelp { color: var(--muted); font-size: 13px; line-height: 1.45; }
 .lines { display: grid; gap: 10px; margin-top: 4px; }
 .lineHead { display: flex; align-items: center; justify-content: space-between; gap: 5px; flex-wrap: wrap; }
 .lineHead h3 { font-size: 16px; }
@@ -57,6 +78,8 @@
 .line legend { color: var(--muted); padding: 0 5px; }
 .line small { display: block; padding-top: 7px; color: var(--muted); }
 .lineFields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.lineFields label { min-width: 0; }
+.lineFields [data-field="description"] { grid-column: 1 / -1; }
 .totals { padding: 12px; margin: 0; background: #edf2fb; border-radius: 8px; }
 .totals div { display: flex; justify-content: space-between; gap: 8px; padding: 5px; }
 .totals dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -80,5 +103,9 @@
   .listHeading { flex-wrap: wrap; }
   .filters { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
   .filters label:first-child { grid-column: 1 / -1; }
+  .condensedFilters { grid-template-columns: minmax(0,1fr); }
   .filters input { font-size: 16px; }
+}
+@media (max-width: 380px) {
+  .maintenanceDates { grid-template-columns: minmax(0, 1fr); }
 }

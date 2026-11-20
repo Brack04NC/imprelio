@@ -1,13 +1,23 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { Dashboard } from '@/components/dashboard';
 import { readWorkspace, session } from '@/lib/backend';
 import { demoSeed, demoWorkspace } from '@/lib/demo';
 import { parseWorkspaceParams, romeDate } from '@/lib/domain';
 
-export default async function Cantieri({ params, searchParams }: {
+type CantieriProps = {
   params: Promise<{ site?: string[] }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+};
+
+export async function generateMetadata({ params, searchParams }: CantieriProps): Promise<Metadata> {
+  const [{ site }, { cantiere }] = await Promise.all([params, searchParams]);
+  const query = new URLSearchParams(typeof cantiere === 'string' ? { cantiere } : {});
+  const { siteId } = parseWorkspaceParams(query, site?.[0]);
+  return { title: siteId ? 'Scheda cantiere' : 'Cantieri' };
+}
+
+export default async function Cantieri({ params, searchParams }: CantieriProps) {
   const [{ site }, rawQuery] = await Promise.all([params, searchParams]);
   if ((site?.length ?? 0) > 1) notFound();
   const query = new URLSearchParams();

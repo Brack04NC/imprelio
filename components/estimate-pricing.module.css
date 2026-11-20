@@ -25,6 +25,7 @@
 .historyPages { display: flex; justify-content: flex-end; gap: 7px; padding: 0 16px 12px; }
 .entries li { display: flex; flex-wrap: wrap; gap: 7px 12px; align-items: center; border-top: 1px solid var(--line); padding: 6px 0; }
 .entries li div { min-width: 0; overflow-wrap: anywhere; margin-right: auto; }
+.entries li .entryActions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-right: 0; }
 .entries strong, .entries small { display: block; }
 .entries strong { color: var(--ink); }
 .entries small { color: var(--muted); margin-top: 4px; }
@@ -91,7 +92,9 @@
   .work { padding: 12px; }
   .draftFields { grid-template-columns: 1fr; }
   .rowFields { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .rowFields input { font-size: 16px; }
+  .rowFields input { min-height: 44px; font-size: 16px; }
+  .include { width: 44px; min-width: 44px; min-height: 44px; }
+  .rowFoot button { min-height: 44px; margin-left: 0; }
   .grandTotal { width: 100%; }
 }
 @media print {

@@ -1,5 +1,8 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+
+export const metadata: Metadata = { title: 'Pagina non disponibile' };
 
 export default function NotFound() {
   return <main className="login-screen"><section className="login-panel">

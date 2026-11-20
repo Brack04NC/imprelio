@@ -32,9 +32,12 @@ export function getWarehouseAvailability(records: readonly OperationRecord[]): M
   return balances;
 }
 
+export function stockMinimum(article: OperationRecord): bigint {
+  return parseStockQuantity(article.fields.stock_min || '0') ?? 0n;
+}
+
 export function isBelowMinimum(article: OperationRecord, available: bigint): boolean {
-  const minimum = parseStockQuantity(article.fields.stock_min || '0') ?? 0n;
-  return !article.archived && available < minimum;
+  return !article.archived && available < stockMinimum(article);
 }
 
 const materialCategories: Option[] = [
@@ -92,12 +95,7 @@ export const resourceDefinitions: Definition[] = [
       { key: 'location', label: 'Posizione in magazzino', placeholder: 'Es. Scaffale B2' },
       { key: 'notes', label: 'Note', type: 'textarea' },
     ],
-    summary: (record, _records, stock) => {
-      const available = stock.get(record.id) ?? 0n;
-      const { code, unit, location } = record.fields;
-      const balance = formatStockQuantity(available) + (unit ? ` ${unit}` : '');
-      return [code, location, `${balance} disponibili`].filter(Boolean);
-    },
+    summary: ({ fields }) => [fields.code, fields.location].filter(Boolean),
   },
   {
     kind: 'movement', plural: 'Movimenti', singular: 'Movimento',

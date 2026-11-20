@@ -9,6 +9,7 @@ import { EstimateClientEditor } from './estimate-client-editor';
 import { DownloadEstimatePdf, EstimatePdfArchive, useEstimatePdfArchive } from './estimate-pdf-archive';
 import { SiteFromEstimate } from './site-from-estimate';
 import { orgLink } from './shell';
+import { useTrashRemoval } from '@/components/trash-removal';
 import type { Client, Identity } from '@/lib/domain';
 import { demoKey, getDemo } from '@/lib/demo';
 import type { SiteOption } from '@/lib/operation-types';
@@ -19,6 +20,7 @@ import { amount, duplicateEstimateCodes, itemBilling, matchEstimateRate, priceKi
   type EstimateQuote, type EstimateRate, type QuoteInput, type QuoteLine, type QuoteLineText, type QuoteSummary } from '@/lib/estimate-pricing';
 import type { ImportedItem } from '@/lib/estimate-import';
 import { estimatePricingKey as localKey, localPrices } from '@/lib/estimate-pricing-demo';
+import { isDemoTrashed } from '@/lib/trash-demo';
 import styles from './estimate-pricing.module.css';
 
 type PricingAction = z.infer<typeof pricingAction>;
@@ -30,6 +32,7 @@ type Draft = { id: string; title: string; site: string; clientFilter?: string; s
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null;
   sourceMismatch: boolean; appliedRate: EstimateRate | null };
 const rowsPerPage = 12;
+const discardDraftMessage = 'Il preventivo contiene modifiche non salvate. Vuoi abbandonarle?';
 
 function quoteTotal(line: QuoteLine) {
   return documentLineTotal('estimate', { quantity: line.quantity, unit_price: line.price });
@@ -65,7 +68,9 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   const [availableSites, setAvailableSites] = useState(sites);
   const [availableClients, setAvailableClients] = useState(clients);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [savedDraft, setSavedDraft] = useState<Draft | null>(null);
   const [draftFilter, setDraftFilter] = useState<'all' | 'review'>('all');
+  const [focusedRow, setFocusedRow] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [rateEditor, setRateEditor] = useState<EstimateRate | null>(null);
   const [siteEditor, setSiteEditor] = useState(false);
@@ -79,10 +84,14 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   const lock = useRef(false);
   const focusBack = useRef<HTMLElement | null>(null);
   const draftHeading = useRef<HTMLHeadingElement>(null);
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  const savedQuotesHeading = useRef<HTMLElement>(null);
+  const removedQuotes = useRef(new Map<string, QuoteSummary>());
   const draftId = draft?.id;
+  const dirty = Boolean(draft && draft !== savedDraft);
   const stableSite = availableSites.find(site => site.id === requestedSite)?.id ?? '';
   const draftSite = availableSites.find(site => site.id === draft?.site);
-  const selectedClient = draftSite?.client_id ?? draft?.clientFilter ?? '';
+  const selectedClient = draft?.clientFilter ?? draftSite?.client_id ?? '';
   const sitesForClient = draft?.clientFilter
     ? availableSites.filter(site => site.client_id === draft.clientFilter)
     : availableSites;
@@ -95,6 +104,24 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   const archiveError = draft ? archive.saveError(draft.id, draft.site) : '';
   const listino = useMemo(() => [...rates].sort((a, b) => a.label.localeCompare(b.label, 'it')), [rates]);
   const editingItem = textEditor === null ? undefined : draft?.items[textEditor];
+  const savedPageCount = Math.max(1, Math.ceil(quotes.length / rowsPerPage));
+  const visibleSavedPage = Math.min(savedPage, savedPageCount);
+  const trash = useTrashRemoval(identity, { kind: 'quote', onChange(action, id) {
+    if (action === 'delete') {
+      setQuotes(current => current.filter(quote => quote.id !== id));
+      if (draft?.id === id) {
+        setDraft(null); setSavedDraft(null); setDraftFilter('all'); setFocusedRow(null); setPage(1); setNotice('');
+      }
+    } else {
+      const restored = removedQuotes.current.get(id);
+      if (restored) setQuotes(current => [restored, ...current.filter(quote => quote.id !== id)]
+        .sort((first, second) => second.created_at.localeCompare(first.created_at) || first.id.localeCompare(second.id)));
+      removedQuotes.current.delete(id);
+    }
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) (savedQuotesHeading.current ?? pageHeading.current)?.focus();
+    });
+  } });
 
   useEffect(() => {
     if (!identity.demo) return;
@@ -116,6 +143,33 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   useEffect(() => {
     if (draftId) draftHeading.current?.focus();
   }, [draftId]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    function warnBeforeNavigation(event: MouseEvent) {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
+      if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+      const destination = new URL(link.href);
+      const here = window.location;
+      if (destination.origin !== here.origin || destination.pathname.startsWith('/api/')
+        || (destination.pathname === here.pathname && destination.search === here.search)) return;
+      if (!window.confirm(discardDraftMessage)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    document.addEventListener('click', warnBeforeNavigation, true);
+    return () => {
+      window.removeEventListener('beforeunload', warnBeforeUnload);
+      document.removeEventListener('click', warnBeforeNavigation, true);
+    };
+  }, [dirty]);
 
   const review = useMemo(() => {
     const items = draft?.items ?? [];
@@ -147,7 +201,10 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   const pending = included.filter(row => !row.line);
   const lines = included.flatMap(row => row.line ?? []);
   const total = included.reduce((sum, row) => sum + (row.total ?? 0n), 0n);
-  const filtered = draftFilter === 'all' ? review : pending;
+  // Leave a resolved row in view while its inputs still have focus. Removing it
+  // after the first valid digit interrupts typing and can change the final price.
+  const filtered = draftFilter === 'all' ? review : review.filter(row =>
+    row.index === focusedRow || (row.item.selected && !row.line));
   const pages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const currentPage = Math.min(page, pages);
   const ready = Boolean(draftSite && draft?.title.trim() && lines.length && !pending.length
@@ -187,6 +244,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
           extractEstimate(file, (current, total) => setProgress(`Lettura pagina ${current} di ${total}…`)),
           latestRates,
         ]);
+        if (dirty && !window.confirm(discardDraftMessage)) return;
         if (refreshedRates) setRates(refreshedRates);
         setRateLoadWarning(refreshedRates === null);
         const fileName = file.name.slice(0, 250);
@@ -194,7 +252,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         const site = sameFile ? draft.site : stableSite;
         setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), clientFilter: sameFile ? draft.clientFilter : undefined,
           importIssue, originalFile: file });
-        setDraftFilter('all'); setPage(1);
+        setSavedDraft(null); setDraftFilter('all'); setFocusedRow(null); setPage(1);
       } finally { setProgress(''); }
     });
   }
@@ -236,7 +294,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   function chooseClient(client: string) {
     const matches = client ? availableSites.filter(site => site.client_id === client) : [];
     setDraft(current => current && { ...current, clientFilter: client,
-      site: matches.some(site => site.id === current.site) ? current.site : matches.length === 1 ? matches[0].id : '' });
+      site: !client || matches.some(site => site.id === current.site) ? current.site : matches.length === 1 ? matches[0].id : '' });
     setNotice('');
   }
 
@@ -278,12 +336,20 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
       const quote: QuoteInput = { id: draft.id, site_id: draft.site, title: draft.title.trim(), source_name: draft.fileName, lines };
       let summary: QuoteSummary;
       if (identity.demo) {
+        if (isDemoTrashed('quote', quote.id)) throw new Error('Il preventivo è nel cestino. Ripristinalo prima di salvarlo.');
         const stored = localPrices();
         const created_at = stored.quotes.find(item => item.id === quote.id)?.created_at ?? new Date().toISOString();
         const value = { ...quote, created_at };
         localStorage.setItem(localKey, JSON.stringify({ ...stored, quotes: [value, ...stored.quotes.filter(item => item.id !== quote.id)] }));
         summary = { id: value.id, site_id: value.site_id, title: value.title, source_name: value.source_name, created_at };
       } else summary = await remote(new URLSearchParams(), { action: 'save_quote', quote });
+      const prices = new Map(included.map(row => [row.index, row.line?.price]));
+      const saved = { ...draft, items: draft.items.map((item, index) => {
+        const price = prices.get(index);
+        return price === undefined ? item : { ...item, manualPrice: price, saved: true };
+      }) };
+      setDraft(current => current === draft ? saved : current);
+      setSavedDraft(saved);
       setQuotes(current => [summary, ...current.filter(item => item.id !== quote.id)]);
       setSavedPage(1);
       setNotice('Preventivo salvato.');
@@ -291,15 +357,23 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
   }
 
   async function openQuote(id: string) {
+    if (dirty && !window.confirm(discardDraftMessage)) return;
     await transact(async () => {
       const quote: EstimateQuote | undefined = identity.demo ? localPrices().quotes.find(item => item.id === id)
         : await remote(new URLSearchParams({ id }));
       if (!quote) throw new Error('Preventivo non disponibile.');
-      setDraft({ id: quote.id, site: quote.site_id, title: quote.title, fileName: quote.source_name,
+      const saved = { id: quote.id, site: quote.site_id, title: quote.title, fileName: quote.source_name,
         warnings: [], warningsReviewed: true,
-        items: quote.lines.map(line => ({ ...line, manualPrice: line.price, selected: true, saved: true, sourceChecked: true })) });
-      setDraftFilter('all'); setPage(1);
+        items: quote.lines.map(line => ({ ...line, manualPrice: line.price, selected: true, saved: true, sourceChecked: true })) };
+      setDraft(saved); setSavedDraft(saved);
+      setDraftFilter('all'); setFocusedRow(null); setPage(1);
     });
+  }
+
+  function requestQuoteRemoval(quote: QuoteSummary, trigger: HTMLElement) {
+    const detail = dirty && draft?.id === quote.id ? 'Le modifiche non salvate al preventivo aperto verranno perse.' : undefined;
+    removedQuotes.current.set(quote.id, quote);
+    trash.request(quote.id, quote.title, trigger, detail);
   }
 
   function ruleFor(item: DraftItem) {
@@ -314,12 +388,12 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
       <Link className="button text-button back-link" href={orgLink('/gestione/computi-metrici' + (stableSite ? '?cantiere=' + stableSite : ''), identity)}>
         <ArrowLeft size={16}/> Computi metrici
       </Link>
-      <header className="page-header"><div><h1>Preventivi da PDF</h1>
+      <header className="page-header"><div><h1 tabIndex={-1} ref={pageHeading}>Preventivi da PDF</h1>
         <p>Applica il tuo listino al computo e verifica le voci prima di salvare.</p></div></header>
       <PdfImportPanel busy={busy || archive.saving} replacing={Boolean(draft)} onFile={file => void loadPdf(file)} onError={setError}/>
       {!draft && identity.demo && <button className={`button text-button ${styles.example}`} disabled={busy} onClick={() => {
         setDraft(makeDraft([demonstration], 'Esempio ponteggio.pdf', stableSite || availableSites[0]?.id || ''));
-        setPage(1); setDraftFilter('all'); setError('');
+        setSavedDraft(null); setPage(1); setDraftFilter('all'); setFocusedRow(null); setError('');
       }}>Prova l’esempio da 1.900 m²</button>}
       {progress && <p role="status" className={styles.notice}>{progress}</p>}
       {notice && <p role="status" className={styles.notice}>{notice}</p>}
@@ -336,16 +410,20 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
               <button className="button text-button" aria-label={'Modifica prezzo ' + rate.label} onClick={event => openRate(rate, event.currentTarget)}><Pencil size={15}/><span>Modifica</span></button></li>)}</ul>}
         </div>
       </details>
-      {quotes.length > 0 && <details className={`panel ${styles.details}`}><summary><Save size={18}/> Preventivi salvati <span>{quotes.length}</span></summary>
-        <ul className={styles.entries}>{quotes.slice((savedPage - 1) * rowsPerPage, savedPage * rowsPerPage).map(quote => <li key={quote.id}><div><strong>{quote.title}</strong>
+      {quotes.length > 0 && <details className={`panel ${styles.details}`}><summary ref={savedQuotesHeading}><Save size={18}/> Preventivi salvati <span>{quotes.length}</span></summary>
+        <ul className={styles.entries}>{quotes.slice((visibleSavedPage - 1) * rowsPerPage, visibleSavedPage * rowsPerPage).map(quote => <li key={quote.id}><div><strong>{quote.title}</strong>
           <small>{availableSites.find(site => site.id === quote.site_id)?.name ?? quote.source_name}</small></div>
-          <button className="button secondary" disabled={busy || archive.saving} aria-label={'Apri preventivo ' + quote.title} onClick={() => void openQuote(quote.id)}>Apri</button></li>)}</ul>
+          <div className={styles.entryActions}>
+            <button type="button" className="button secondary" disabled={busy || archive.saving} aria-label={'Apri preventivo ' + quote.title} onClick={() => void openQuote(quote.id)}>Apri</button>
+            <button type="button" className="button text-button" disabled={busy || archive.saving} aria-haspopup="dialog"
+              aria-label={'Elimina preventivo ' + quote.title} onClick={event => requestQuoteRemoval(quote, event.currentTarget)}><Trash2 size={16} aria-hidden="true"/> Elimina</button>
+          </div></li>)}</ul>
         {quotes.length > rowsPerPage && <div className={styles.historyPages}>
-          <button className="button secondary" disabled={savedPage === 1} onClick={() => setSavedPage(savedPage - 1)}>Precedenti</button>
-          <button className="button secondary" disabled={savedPage * rowsPerPage >= quotes.length} onClick={() => setSavedPage(savedPage + 1)}>Successivi</button>
+          <button className="button secondary" disabled={visibleSavedPage === 1} onClick={() => setSavedPage(visibleSavedPage - 1)}>Precedenti</button>
+          <button className="button secondary" disabled={visibleSavedPage === savedPageCount} onClick={() => setSavedPage(visibleSavedPage + 1)}>Successivi</button>
         </div>}
       </details>}
-      {draft && <section className={`panel ${styles.work}`} aria-labelledby="draft-heading">
+      {draft && <section className={`panel ${styles.work}`} aria-labelledby="draft-heading" aria-busy={busy}>
         <div className={styles.workHead}><div><h2 id="draft-heading" tabIndex={-1} ref={draftHeading}>{draft.importIssue ? 'Dati del cantiere' : 'Revisione del preventivo'}</h2>
           <p>{draft.fileName}{!draft.importIssue && ` · ${review.length} ${review.length === 1 ? 'voce importata' : 'voci importate'}`}</p>
           {!draft.importIssue && rates.length > 0 && <p role="status">{appliedRates} {appliedRates === 1 ? 'prezzo da listino applicato' : 'prezzi da listino applicati'}</p>}
@@ -358,20 +436,20 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         </p>}
         {draft.warnings.length > 0 && <div className={styles.warning}>
           {draft.warnings.map(warning => <p key={warning}>{warning}</p>)}
-          <label><input type="checkbox" checked={draft.warningsReviewed} onChange={event => setDraft({ ...draft, warningsReviewed: event.target.checked })}/>
+          <label><input type="checkbox" checked={draft.warningsReviewed} disabled={busy} onChange={event => setDraft({ ...draft, warningsReviewed: event.target.checked })}/>
             Ho verificato che le voci importate coprono il preventivo.</label>
         </div>}
         <div className={`form-grid ${styles.draftFields}`}>
           {!draft.importIssue && <label className={styles.draftTitle}>Titolo preventivo
-            <input maxLength={160} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/>
+            <input maxLength={160} value={draft.title} disabled={busy} onChange={event => setDraft({ ...draft, title: event.target.value })}/>
           </label>}
           <label>Cliente
-            <select aria-label="Cliente" value={selectedClient} disabled={archive.saving} onChange={event => chooseClient(event.target.value)}>
+            <select aria-label="Cliente" value={selectedClient} disabled={busy || archive.saving} onChange={event => chooseClient(event.target.value)}>
               <option value="">Tutti i clienti</option>
               {sortedClients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
             </select>
           </label>
-          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} disabled={archive.saving} onChange={event => setDraft({ ...draft, site: event.target.value })}>
+          <label>Cantiere<select id="estimate-site" aria-label="Cantiere" value={draft.site} disabled={busy || archive.saving} onChange={event => setDraft({ ...draft, site: event.target.value })}>
             <option value="">{draft.clientFilter && !sitesForClient.length ? 'Nessun cantiere per questo cliente' : 'Seleziona il cantiere'}</option>
             {sitesForClient.map(site => <option key={site.id} value={site.id}>{site.name} · {site.city}</option>)}
           </select></label>
@@ -406,7 +484,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         {!draft.importIssue && <><div className={styles.toolbar}>
           <button className="button secondary" aria-pressed={draftFilter === 'all'} onClick={() => { setDraftFilter('all'); setPage(1); }}>Tutte ({review.length})</button>
           <button className="button secondary" aria-pressed={draftFilter === 'review'} onClick={() => { setDraftFilter('review'); setPage(1); }}>Da verificare ({pending.length})</button>
-          {pending.length > 0 && lines.length > 0 && <button type="button" className="button text-button" onClick={() => {
+          {pending.length > 0 && lines.length > 0 && <button type="button" className="button text-button" disabled={busy} onClick={() => {
             const excluded = new Set(pending.map(row => row.index));
             setDraft(current => current && { ...current, items: current.items.map((item, index) => excluded.has(index) ? { ...item, selected: false } : item) });
           }}>Escludi voci da verificare</button>}
@@ -418,19 +496,24 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
             const scope = itemBilling(item);
             const term = scope.kind === 'rental' ? (scope.months === 1 ? '1 mese incluso' : scope.months + ' mesi inclusi')
               : scope.kind === 'extension' ? 'Mese aggiuntivo' : scope.kind === 'unknown' ? 'Durata da verificare' : '';
-            return <article key={index} className={styles.row} data-included={item.selected}>
+            return <article key={index} className={styles.row} data-included={item.selected}
+              onFocusCapture={() => setFocusedRow(index)} onBlurCapture={event => {
+                if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget)) {
+                  setFocusedRow(current => current === index ? null : current);
+                }
+              }}>
               <div className={styles.rowIntro}><label className={styles.include}><input type="checkbox" checked={item.selected}
-                aria-label={'Includi voce ' + item.reference} onChange={event => setItem(index, { selected: event.target.checked })}/></label>
+                disabled={busy} aria-label={'Includi voce ' + item.reference} onChange={event => setItem(index, { selected: event.target.checked })}/></label>
                 <div><small>Voce {item.reference} · Pag. {item.page}{item.code && ' · ' + item.code}</small>
                   <h3>{item.title}</h3>{term && <span className={styles.term}>{term}</span>}
                   {item.description && item.description !== item.title && <details className={styles.original}><summary>Descrizione della voce</summary><p>{item.description}</p></details>}
                 </div></div>
               <div className={styles.rowFields}>
-                <label>Quantità<input aria-label={'Quantità voce ' + item.reference} inputMode="decimal" maxLength={14} value={item.quantity}
+                <label>Quantità<input aria-label={'Quantità voce ' + item.reference} inputMode="decimal" maxLength={14} disabled={busy} value={item.quantity}
                   onChange={event => setItem(index, { quantity: event.target.value, sourceChecked: false })}/></label>
-                <label>Unità<input aria-label={'Unità voce ' + item.reference} maxLength={40} value={item.unit}
+                <label>Unità<input aria-label={'Unità voce ' + item.reference} maxLength={40} disabled={busy} value={item.unit}
                   onChange={event => setItem(index, { unit: event.target.value })}/></label>
-                <label>Prezzo tuo (€)<input aria-label={'Prezzo voce ' + item.reference} inputMode="decimal" maxLength={12} value={row.price}
+                <label>Prezzo tuo (€)<input aria-label={'Prezzo voce ' + item.reference} inputMode="decimal" maxLength={12} disabled={busy} value={row.price}
                   placeholder="Da inserire" onChange={event => setItem(index, { manualPrice: event.target.value, saved: false })}/></label>
                 <div className={styles.rowAmount}><small>Importo</small><strong>{row.total === null ? '—' : formatEuro(row.total)}</strong></div>
               </div>
@@ -439,9 +522,9 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
                 {row.appliedRate && <small>{row.appliedRate.label}</small>}
                 {item.sourcePrice && <small>Prezzo unitario PDF {euroOrDash(item.sourcePrice)}</small>}
                 {item.sourceTotal && (!item.sourcePrice || row.sourceMismatch) && <small>Importo PDF {euroOrDash(item.sourceTotal)}</small>}
-                {row.sourceMismatch && <button className="button text-button" type="button"
+                {row.sourceMismatch && <button className="button text-button" type="button" disabled={busy}
                   onClick={() => setItem(index, { sourceChecked: true })}>Conferma quantità</button>}
-                {item.manualPrice !== null && <button className="button text-button" type="button" onClick={() => setItem(index, { manualPrice: null, saved: false })}>Usa listino</button>}
+                {item.manualPrice !== null && <button className="button text-button" type="button" disabled={busy} onClick={() => setItem(index, { manualPrice: null, saved: false })}>Usa listino</button>}
                 <button className="button text-button" type="button" disabled={busy} aria-label={'Modifica testo voce ' + item.reference}
                   onClick={event => { focusBack.current = event.currentTarget; setTextEditor(index); }}><Pencil size={15}/> Modifica testo</button>
                 <button className="button text-button" type="button" disabled={busy}
@@ -452,12 +535,13 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
               </div>
             </article>;
           })}
-          {!filtered.length && <p className={styles.complete}><Check size={18}/> Tutte le voci incluse hanno un prezzo.</p>}
+          {!filtered.length && included.length > 0 && <p className={styles.complete}><Check size={18}/> Tutte le voci incluse hanno un prezzo.</p>}
         </div>
         {pages > 1 && <div className={styles.pagination}><span>Pagina {currentPage} di {pages}</span>
           <button className="button secondary" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Indietro</button>
           <button className="button secondary" disabled={currentPage >= pages} onClick={() => setPage(currentPage + 1)}>Avanti</button></div>}
         <footer className={styles.actions}>
+          {dirty && <p>Preventivo in revisione. Salva per ritrovarlo nei preventivi salvati.</p>}
           {pending.length > 0 && <p>Completa i prezzi o escludi le voci che non vuoi offrire.</p>}
           {!draftSite && <p>Seleziona il cantiere per salvare.</p>}
           {!included.length && <p>Includi almeno una voce nel preventivo.</p>}
@@ -476,6 +560,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         onSave={saveRate} onRemove={removeRate}/>}
     </div>
     {draft && ready && draftSite && <PrintQuote draft={draft} site={draftSite} org={identity.org.name} lines={lines} total={total}/>}
+    {trash.feedback}
   </>;
 }
 

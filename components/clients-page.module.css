@@ -16,6 +16,7 @@
 .detailHeader h2 { font-size: clamp(19px, 3vw, 24px); overflow-wrap: anywhere; margin: 0; }
 .detailHeader p, .sitesHeader p { margin: 4px 0 0; }
 .detailHeader .clientIcon { width: 49px; height: 49px; }
+.detail .backToDirectory { display: none; }
 .contacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 4px 19px 18px; margin: 0; }
 .contacts dt { color: var(--muted); font-size: 12px; margin-bottom: 3px; }
 .contacts dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -30,6 +31,7 @@
 @media (max-width: 900px) {
   .grid { grid-template-columns: 1fr; }
   .clientList { max-height: 235px; }
+  .detail .backToDirectory { display: inline-flex; margin: 0 19px 10px; }
 }
 
 @media (max-width: 500px) {

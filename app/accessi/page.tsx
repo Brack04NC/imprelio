@@ -1,8 +1,11 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { AccessPage } from '@/components/access-page';
 import { readAccess, session } from '@/lib/backend';
 import { demoSeed } from '@/lib/demo';
 import { romeDate } from '@/lib/domain';
+
+export const metadata: Metadata = { title: 'Gestione accessi' };
 
 export default async function Accessi({ searchParams }: { searchParams: Promise<{ azienda?: string }> }) {
   const { azienda } = await searchParams;

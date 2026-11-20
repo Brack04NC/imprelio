@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { documentDefinitions } from './operation-documents.ts';
 import { resourceDefinitions } from './operation-resources.ts';
+import { validateVehicleMaintenance } from './vehicle-maintenance.ts';
 import { areas, operationKinds, type Definition, type Field, type OperationArea, type OperationKind, type OperationWrite, type Values } from './operation-types.ts';
 
 const definitions = new Map<OperationKind, Definition>(
@@ -69,6 +70,7 @@ export function validateOperation(input: unknown): OperationWrite {
   if (definition.site === 'required' && !site_id) throw new Error('Seleziona il cantiere.');
   const formFields = kind === 'crew' && fields?.team_type === undefined ? { ...fields, team_type: 'external' } : fields;
   const cleanFields = cleanValues(definition.fields, formFields);
+  if (kind === 'article' && fields) Object.assign(cleanFields, validateVehicleMaintenance({ ...fields, category: cleanFields.category }));
   const cleanLines = definition.lineFields ? (lines ?? []).map((line, index) => {
     try { return cleanValues(definition.lineFields!, line); }
     catch (error) { throw new Error(`Riga ${index + 1}. ${error instanceof Error ? error.message : 'Controlla i dati.'}`); }

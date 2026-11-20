@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { compareJobs, formatDate, jobLabels, kindLabels, type AgendaItem } from '@/lib/domain';
 import styles from './calendar-grid.module.css';
 
@@ -42,13 +42,18 @@ function CalendarEvent({ item, onEdit, compact = false }: {
 }) {
   const time = eventTime(item);
   const label = eventLabel(item);
+  const detail = [kindLabels[item.kind], item.zone, item.status === 'done' ? jobLabels[item.status] : '']
+    .filter(Boolean).join(' · ');
+  const assistiveText = [
+    'Modifica intervento', compact ? detail : '',
+    item.status !== 'done' ? jobLabels[item.status] : '',
+  ].filter(Boolean).join(' · ');
   return <button type="button" className={`${styles.event} ${compact ? styles.compactEvent : ''}`}
-    data-kind={item.kind} data-status={item.status} title={label}
-    aria-label={`Modifica intervento: ${label}`} onClick={() => onEdit(item)}>
+    data-kind={item.kind} data-status={item.status} title={label} onClick={() => onEdit(item)}>
     {time && <time className={styles.eventTime} dateTime={`${item.due_date}T${time}`}>{time}</time>}
     <span className={styles.eventSite}>{item.site.name}</span>
-    {!compact && <span className={styles.eventDetail}>{kindLabels[item.kind]}{item.zone && ` · ${item.zone}`}
-      {item.status === 'done' && ` · ${jobLabels[item.status]}`}</span>}
+    {!compact && <span className={styles.eventDetail}>{detail}</span>}
+    <span className="sr-only">{assistiveText}</span>
   </button>;
 }
 
@@ -77,7 +82,7 @@ function MonthGrid({ days, date, today, dayHref, canCreate, onCreate, onEdit, jo
           <div className={styles.monthEvents}>
             {entries.slice(0, monthEventLimit).map(item => <CalendarEvent key={item.id} item={item} onEdit={onEdit} compact/>)}
             {more > 0 && <Link href={dayHref(day)} prefetch={false} className={styles.more}
-              aria-label={`${more} ${more === 1 ? 'altro intervento' : 'altri interventi'} il ${fullDay}`}>
+              aria-label={`+${more} ${more === 1 ? 'altro intervento' : 'altri interventi'} il ${fullDay}`}>
               +{more}<span> {more === 1 ? 'altro' : 'altri'}</span>
             </Link>}
           </div>
@@ -91,14 +96,17 @@ function slotKey(day: string, hour?: string) {
   return `${day}/${hour ?? ''}`;
 }
 
-function TimeSlot({ day, dayLabel, hour, entries, canCreate, onCreate, onEdit }: {
+function TimeSlot({ day, dayLabel, hour, entries, canCreate, keyboardSlot, onSlotFocus, onCreate, onEdit }: {
   day: string; dayLabel: string; hour?: string; entries?: AgendaItem[]; canCreate: boolean;
+  keyboardSlot: string; onSlotFocus: (key: string) => void;
   onCreate: CalendarProps['onCreate']; onEdit: CalendarProps['onEdit'];
 }) {
   const label = addLabel(dayLabel, hour);
+  const key = slotKey(day, hour);
   return <div className={styles.timeSlot} data-date={day} data-hour={hour} data-has-events={!!entries?.length}>
     {entries?.map(item => <CalendarEvent key={item.id} item={item} onEdit={onEdit}/>)}
     {canCreate && <button type="button" className={styles.slotAdd} aria-label={label} title={label}
+      data-calendar-slot={key} tabIndex={key === keyboardSlot ? 0 : -1} onFocus={() => onSlotFocus(key)}
       onClick={() => onCreate(day, hour ? `${hour}:00` : undefined)}><Plus size={15}/></button>}
   </div>;
 }
@@ -107,6 +115,8 @@ function ScheduleGrid({ view, date, today, days, items, dayHref, canCreate, onCr
   const scroller = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLDivElement>(null);
   const firstRow = useRef<HTMLDivElement>(null);
+  const instructionsId = useId();
+  const [focusedSlot, setFocusedSlot] = useState<{ date: string; view: CalendarProps['view']; key: string }>();
   const dayLabels = useMemo(() => new Map(days.map(day => [day, longDate(day)])), [days]);
   const { slots, firstHour } = useMemo(() => {
     const visible = new Set(days);
@@ -123,6 +133,8 @@ function ScheduleGrid({ view, date, today, days, items, dayHref, canCreate, onCr
     }
     return { slots, firstHour: hours[firstHour] };
   }, [days, items]);
+  const week = view === 'settimana';
+  const keyboardSlot = focusedSlot?.date === date && focusedSlot.view === view ? focusedSlot.key : slotKey(date, firstHour);
 
   useEffect(() => {
     const scroll = scroller.current;
@@ -130,24 +142,50 @@ function ScheduleGrid({ view, date, today, days, items, dayHref, canCreate, onCr
     if (scroll && row && heading.current) {
       const top = row.getBoundingClientRect().top - scroll.getBoundingClientRect().top
         + scroll.scrollTop - heading.current.offsetHeight;
-      scroll.scrollTo({ top, left: 0 });
+      const day = heading.current.querySelector<HTMLElement>(`[data-calendar-day="${date}"]`);
+      const timeWidth = heading.current.querySelector<HTMLElement>('[data-calendar-hours]')?.offsetWidth ?? 0;
+      const left = week && day ? day.getBoundingClientRect().left - scroll.getBoundingClientRect().left
+        + scroll.scrollLeft - timeWidth - scroll.clientLeft : 0;
+      scroll.scrollTo({ top, left });
     }
-  }, [date, view, firstHour]);
+  }, [date, firstHour, week]);
 
-  const week = view === 'settimana';
+  function handleSlotKeys(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !(event.target instanceof HTMLButtonElement)) return;
+    const source = event.target.dataset.calendarSlot;
+    if (!source) return;
+    const [day, hour] = source.split('/');
+    let dayIndex = days.indexOf(day);
+    let hourIndex = hour ? Number(hour) : -1;
+    switch (event.key) {
+      case 'ArrowLeft': if (!week) return; dayIndex = Math.max(0, dayIndex - 1); break;
+      case 'ArrowRight': if (!week) return; dayIndex = Math.min(days.length - 1, dayIndex + 1); break;
+      case 'ArrowUp': hourIndex = Math.max(-1, hourIndex - 1); break;
+      case 'ArrowDown': hourIndex = Math.min(hours.length - 1, hourIndex + 1); break;
+      default: return;
+    }
+    event.preventDefault();
+    const target = slotKey(days[dayIndex], hours[hourIndex]);
+    if (target !== source) scroller.current?.querySelector<HTMLButtonElement>(`[data-calendar-slot="${target}"]`)?.focus();
+  }
+
   const slot = (day: string, hour?: string) => <TimeSlot key={day} day={day} dayLabel={dayLabels.get(day) ?? day} hour={hour}
-    entries={slots.get(slotKey(day, hour))} canCreate={canCreate} onCreate={onCreate} onEdit={onEdit}/>;
+    entries={slots.get(slotKey(day, hour))} canCreate={canCreate} keyboardSlot={keyboardSlot}
+    onSlotFocus={key => setFocusedSlot({date, view, key})} onCreate={onCreate} onEdit={onEdit}/>;
 
   return <div ref={scroller} className={`${styles.scheduleScroll} ${week ? styles.week : styles.day}`}
-    role="region" aria-label={week ? 'Calendario settimanale' : 'Calendario del giorno'} tabIndex={0}>
+    role="region" aria-label={week ? 'Calendario settimanale' : 'Calendario del giorno'} tabIndex={0}
+    aria-describedby={canCreate ? instructionsId : undefined} onKeyDown={handleSlotKeys}>
+    {canCreate && <p id={instructionsId} className="sr-only">Quando il pulsante per aggiungere un intervento è a fuoco, usa le frecce per cambiare fascia e premi Invio per aprire il modulo.</p>}
     <div className={styles.scheduleHeading} ref={heading}>
       <div className={`${styles.slotLine} ${styles.scheduleDays}`}>
-        <span className={styles.hourLabel} aria-hidden="true"/>
+        <span className={styles.hourLabel} data-calendar-hours aria-hidden="true"/>
         {days.map(day => {
           const label = formatDate(day, { weekday: week ? 'short' : 'long', day: 'numeric', month: week ? undefined : 'long' });
           return week
-            ? <Link key={day} className={styles.scheduleDayLabel} href={dayHref(day)} prefetch={false}
-                aria-label={`Apri ${dayLabels.get(day) ?? day}`} aria-current={day === today ? 'date' : undefined}>
+            ? <Link key={day} className={styles.scheduleDayLabel} href={dayHref(day)} prefetch={false} data-calendar-day={day}
+                aria-label={`${label}, ${formatDate(day, { month: 'long', year: 'numeric' })} · Apri la vista del giorno`}
+                aria-current={day === today ? 'date' : undefined}>
                 <time dateTime={day}>{label}</time>
               </Link>
             : <span key={day} className={styles.scheduleDayLabel} aria-current={day === today ? 'date' : undefined}>

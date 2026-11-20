@@ -8,11 +8,13 @@ import { agendaPeriods, agendaRange, inAgenda, type AgendaView } from '@/lib/age
 import { calendarPath, calendarRange, type CalendarSelection } from '@/lib/calendar';
 import { requestWorkspace } from '@/lib/client-api';
 import { demoAgenda, demoKey, getDemo, updateDemo } from '@/lib/demo';
-import { formatDate, type Action, type AgendaItem, type Identity, type Site } from '@/lib/domain';
+import { formatDate, kindLabels, type Action, type AgendaItem, type Identity, type Site } from '@/lib/domain';
+import { isDemoTrashed } from '@/lib/trash-demo';
 import { AgendaRow } from './agenda-row';
 import { CalendarPanel } from './calendar-panel';
 import { Editor } from './editor';
 import { Shell, orgLink } from './shell';
+import { useTrashRemoval } from '@/components/trash-removal';
 
 type SiteChoice = Pick<Site, 'id' | 'name' | 'city'>;
 type Editing = AgendaItem | { date: string; time?: string };
@@ -36,6 +38,13 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
   const range = calendar ? calendarRange(calendar) : agendaRange(view, today);
   const displayed = demo ? demoAgenda(demo, range) : { items, sites };
   const selectedDay = calendar?.date ?? (view.period === 'data' ? view.date : today);
+  const editedJob = editing && 'site' in editing ? editing : null;
+  const trash = useTrashRemoval(identity, {
+    kind: 'intervention', onChange: () => {
+      if (identity.demo) setDemo(getDemo(today));
+      else router.refresh();
+    },
+  });
   const dayLabel = (day: string) => formatDate(day, { day: 'numeric', month: 'long', year: 'numeric' });
   const rangeLabel = view.period === 'settimana' && range.from
     ? `${dayLabel(range.from)} – ${dayLabel(range.to)}`
@@ -50,6 +59,13 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
   }, [identity.demo, today]);
+
+  useEffect(() => {
+    if (!editing && opener.current?.isConnected === false && document.activeElement === document.body) {
+      opener.current = null;
+      add.current?.focus();
+    }
+  });
 
   function dateHref(date: string) {
     return orgLink('/agenda?' + new URLSearchParams({ data: date }), identity);
@@ -67,24 +83,27 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     setEditing(job);
   }
 
-  function closeEditor() {
+  function closeEditor(focusAdd = false) {
     setEditing(null);
-    requestAnimationFrame(() => (opener.current?.isConnected ? opener.current : add.current)?.focus());
+    const target = opener.current;
+    requestAnimationFrame(() => (!focusAdd && target?.isConnected && target !== document.body ? target : add.current)?.focus());
   }
 
   async function save(action: Action) {
     if (action.action !== 'job') return;
     if (identity.demo) {
+      if (isDemoTrashed('intervention', action.id)) throw new Error('L’intervento è nel cestino. Ripristinalo prima di modificarlo.');
       const next = updateDemo(getDemo(today), action);
       localStorage.setItem(demoKey, JSON.stringify(next));
       setDemo(next);
     } else {
       await requestWorkspace(new URLSearchParams({ azienda: identity.org.id }), undefined, action);
     }
-    closeEditor();
+    const staysInView = inAgenda(action, range);
+    closeEditor(!staysInView);
     setNotice('Intervento salvato.');
-    if (!inAgenda(action, range)) window.location.assign(calendar
-      ? orgLink(calendarPath(calendar.view, action.due_date), identity) : dateHref(action.due_date));
+    if (!staysInView) router.push(calendar
+      ? orgLink(calendarPath(calendar.view, action.due_date), identity) : dateHref(action.due_date), { scroll: false });
     else if (!identity.demo) router.refresh();
   }
 
@@ -108,7 +127,7 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     </> : <section className="panel agenda-panel" aria-labelledby="agenda-period">
       <header className="panel-header">
         <div><h2 id="agenda-period">{view.period === 'data' ? 'Data selezionata' : agendaPeriods.find(item => item.id === view.period)?.label}</h2>
-          <p>{rangeLabel}</p>
+          <p role="status">{rangeLabel}</p>
         </div>
         <span className="agenda-heading-icon"><CalendarDays size={20}/></span>
       </header>
@@ -134,7 +153,12 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
     {editing && <Editor
       editor={'site' in editing ? { type: 'job', site: editing.site, job: editing } : { type: 'job', sites: displayed.sites }}
       today={'date' in editing ? editing.date : selectedDay} defaultTime={'date' in editing ? editing.time : undefined}
-      clients={[]} onClose={closeEditor} save={save}/>}
+      clients={[]} onClose={closeEditor} save={save} onDelete={editedJob ? () => {
+        setEditing(null);
+        setNotice('');
+        trash.request(editedJob.id, [kindLabels[editedJob.kind], editedJob.site.name, editedJob.zone].filter(Boolean).join(' · '), opener.current);
+      } : undefined}/>}
+    {trash.feedback}
     {notice && <div className="toast" role="status">{notice}<button type="button" className="button text-button" onClick={() => setNotice('')}>Chiudi</button></div>}
   </Shell>;
 }

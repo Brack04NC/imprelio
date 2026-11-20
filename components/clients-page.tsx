@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowUpRight, Building2, ChevronRight, HardHat, Pencil, Plus, Search, Users } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Building2, ChevronRight, HardHat, Pencil, Plus, Search, Users } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { clientSchema, demoClientDirectory, type ClientEntry } from '@/lib/client-directory';
 import { demoKey, getDemo } from '@/lib/demo';
@@ -41,6 +41,8 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
   const pending = useRef(false);
   const focusDetail = useRef(false);
   const title = useRef<HTMLHeadingElement>(null);
+  const selectedButton = useRef<HTMLButtonElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const selectedParam = params.get('cliente');
   const search = searchKey(query.trim());
   const filtered = clients.filter(client => [client.name, client.contact_name, client.email, client.phone, client.address]
@@ -148,15 +150,16 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
     <div className={styles.grid}>
       <section className={`panel ${styles.directory}`} aria-label="Elenco clienti">
         <header className="panel-header">
-          <div><h2>Anagrafiche</h2><p>{filtered.length} {filtered.length === 1 ? 'cliente' : 'clienti'}</p></div>
+          <div><h2>Anagrafiche</h2><p role="status">{filtered.length} {filtered.length === 1 ? 'cliente' : 'clienti'}</p></div>
           <span className="agenda-heading-icon"><Users size={20}/></span>
         </header>
         <div className={styles.search}>
-          <label className="search-field"><Search size={18}/><input type="search" aria-label="Cerca clienti" placeholder="Cerca clienti" maxLength={140} value={query} onChange={event => setQuery(event.currentTarget.value)}/></label>
+          <label className="search-field"><Search size={18}/><input ref={searchInput} type="search" aria-label="Cerca clienti" placeholder="Cerca clienti" maxLength={140} value={query} onChange={event => setQuery(event.currentTarget.value)}/></label>
         </div>
         {filtered.length ? <ul className={styles.clientList}>
           {filtered.map(client => <li key={client.id}>
-            <button type="button" className={styles.client} aria-pressed={client.id === selected?.id} onClick={() => selectClient(client.id, true)}>
+            <button type="button" ref={client.id === selected?.id ? selectedButton : undefined} className={styles.client}
+              aria-pressed={client.id === selected?.id} onClick={() => selectClient(client.id, true)}>
               <span className={styles.clientIcon}><Building2 size={19}/></span>
               <span className={styles.clientCaption}><strong>{client.name}</strong><small>{siteCount(client.sites.length)}</small></span>
               <ChevronRight size={16} className={styles.arrow}/>
@@ -177,6 +180,8 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
           </div>
           <button className="button secondary" onClick={event => openEditor(selected, event.currentTarget)}><Pencil size={16}/> Modifica</button>
         </div>
+        <button type="button" className={`button text-button ${styles.backToDirectory}`}
+          onClick={() => (selectedButton.current ?? searchInput.current)?.focus()}><ArrowLeft size={16}/> Torna all’elenco clienti</button>
         {(selected.email || selected.phone || selected.address || selected.notes) && <dl className={styles.contacts}>
           {selected.email && <div><dt>Email</dt><dd><a href={`mailto:${encodeURIComponent(selected.email)}`}>{selected.email}</a></dd></div>}
           {selected.phone && <div><dt>Telefono</dt><dd>{selected.phone}</dd></div>}
@@ -196,7 +201,7 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
               <ArrowUpRight size={16} className={styles.arrow}/>
             </Link>
           </li>)}
-        </ul> : <div className="empty">I cantieri di questo cliente compariranno qui.</div>}
+        </ul> : <div className="empty">Nessun cantiere collegato.</div>}
       </section>}
     </div>
 

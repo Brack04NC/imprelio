@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { OperationPage } from '@/components/operation-page';
@@ -9,8 +10,13 @@ import { demoSiteOptions, forArea, operationSamples } from '@/lib/operations-dem
 import { areas } from '@/lib/operation-types';
 import { isArea } from '@/lib/operations';
 
+export async function generateMetadata({ params }: { params: Promise<{ area: string }> }): Promise<Metadata> {
+  const { area } = await params;
+  return { title: isArea(area) ? areas[area].title : 'Pagina non disponibile' };
+}
+
 export default async function OperationalArea({ params, searchParams }: {
-  params: Promise<{ area: string }>; searchParams: Promise<{ azienda?: string; cantiere?: string; tipo?: string }>;
+  params: Promise<{ area: string }>; searchParams: Promise<{ azienda?: string; cantiere?: string; tipo?: string; veicolo?: string }>;
 }) {
   const [{ area }, query] = await Promise.all([params, searchParams]);
   if (!isArea(area)) notFound();
@@ -29,6 +35,7 @@ export default async function OperationalArea({ params, searchParams }: {
     </section>
   </Shell>;
   const sites = db ? await operationSites(db, identity.org.id) : demoSiteOptions(today);
-  return <OperationPage key={identity.org.id + area + (query.cantiere ?? '') + (query.tipo ?? '')} identity={identity}
-    area={area} today={today} initial={result} sites={sites} requestedSite={query.cantiere} requestedKind={query.tipo}/>;
+  const vehicle = area === 'magazzino' && typeof query.veicolo === 'string' ? query.veicolo : undefined;
+  return <OperationPage key={JSON.stringify([identity.org.id, area, query.cantiere, query.tipo, vehicle])} identity={identity}
+    area={area} today={today} initial={result} sites={sites} requestedSite={query.cantiere} requestedKind={query.tipo} requestedVehicle={vehicle}/>;
 }

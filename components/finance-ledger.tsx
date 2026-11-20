@@ -61,6 +61,7 @@ export function FinanceLedger({ identity, initial, sites, today }: {
   const addMovement = useRef<HTMLButtonElement>(null);
   const addAccount = useRef<HTMLButtonElement>(null);
   const cancelVoid = useRef<HTMLButtonElement>(null);
+  const requestVoid = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!identity.demo) { setData(initial); setAvailableSites(sites); return; }
@@ -106,8 +107,10 @@ export function FinanceLedger({ identity, initial, sites, today }: {
 
   function openEntry(entry?: FinancialEntry) {
     if (!account) return;
+    const earliest = statement?.from ?? account.opening_date;
+    const suggestedDate = today < earliest ? earliest : statement && today > to ? to : today;
     openEditor({ kind: 'entry', id: entry?.id ?? crypto.randomUUID(), account_id: account.id, existing: Boolean(entry),
-      site_id: entry?.site_id ?? '', record_date: entry?.record_date ?? (today > account.opening_date ? today : account.opening_date),
+      site_id: entry?.site_id ?? '', record_date: entry?.record_date ?? suggestedDate,
       description: entry?.description ?? '', direction: entry?.direction ?? 'in', amount: entry ? centsToEuroInput(entry.amount_cents) : '',
       reference: entry?.reference ?? '' });
   }
@@ -208,11 +211,13 @@ export function FinanceLedger({ identity, initial, sites, today }: {
             <Pencil size={17}/>
           </button>
         </div>
-        <label>Dal<input type="date" max={to || undefined} value={from} onChange={event => changePeriod('from', event.target.value)}/></label>
-        <label>Al<input type="date" min={from || undefined} value={to} onChange={event => changePeriod('to', event.target.value)}/></label>
+        <label>Dal<input type="date" max={to || undefined} value={from} onChange={event => changePeriod('from', event.target.value)}
+          aria-invalid={filterError ? true : undefined} aria-describedby={filterError ? 'statement-filter-error' : undefined}/></label>
+        <label>Al<input type="date" min={from || undefined} value={to} onChange={event => changePeriod('to', event.target.value)}
+          aria-invalid={filterError ? true : undefined} aria-describedby={filterError ? 'statement-filter-error' : undefined}/></label>
         <button type="button" className="button secondary" disabled={!statement} onClick={exportStatement}>
           <Download size={17}/> Esporta CSV</button>
-        {filterError && <p className={styles.filterError} role="status">{filterError}</p>}
+        {filterError && <p className={styles.filterError} id="statement-filter-error" role="status">{filterError}</p>}
       </section>
       {statement && <>
         <dl className={styles.totals} aria-label="Riepilogo del periodo">
@@ -298,10 +303,14 @@ export function FinanceLedger({ identity, initial, sites, today }: {
           {error && <p className="form-error" role="alert">{error}</p>}
         </fieldset>
         <footer className={`drawer-footer ${styles.drawerFooter}`}>
-          {editor.kind === 'entry' && editor.existing && !confirmVoid && <button type="button" className={`button secondary ${styles.remove}`}
+          {editor.kind === 'entry' && editor.existing && !confirmVoid && <button ref={requestVoid} type="button" className={`button secondary ${styles.remove}`}
             disabled={busy} onClick={() => { setConfirmVoid(true); setError(''); }}><Ban size={16}/> Annulla movimento</button>}
           <button ref={cancelVoid} type="button" className="button secondary" disabled={busy}
-            onClick={confirmVoid ? () => { setConfirmVoid(false); setError(''); } : closeEditor}>{confirmVoid ? 'Indietro' : 'Annulla'}</button>
+            onClick={confirmVoid ? () => {
+              setConfirmVoid(false);
+              setError('');
+              requestAnimationFrame(() => requestVoid.current?.focus());
+            } : closeEditor}>{confirmVoid ? 'Indietro' : 'Annulla'}</button>
           <button type="submit" className={`button ${confirmVoid ? styles.danger : 'primary'}`} disabled={busy}>
             {busy ? 'Attendi…' : confirmVoid ? 'Conferma annullamento' : editor.kind === 'account' ? 'Salva conto' : 'Salva movimento'}</button>
         </footer>

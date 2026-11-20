@@ -1,0 +1,45 @@
+.confirm {
+  width: min(440px, calc(100% - 32px));
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 12px 38px #0f1c3838;
+}
+
+.confirm::backdrop { background: #0c192a86; }
+.confirm form { display: grid; gap: 14px; }
+.confirm h2 { font-size: 22px; }
+.description { display: grid; gap: 6px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.confirm strong { color: var(--ink); }
+.actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.actions button[type=submit] { color: white; background: #9a2a26; }
+.actions button[type=submit]:hover { background: #7f201c; }
+
+.notifications {
+  position: fixed;
+  z-index: 10;
+  inset-inline-end: 18px;
+  inset-block-end: max(18px, env(safe-area-inset-bottom));
+  width: min(390px, calc(100% - 36px));
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 5px 20px #182f5225;
+  background: var(--surface);
+  pointer-events: auto;
+}
+
+.toast small { display: block; margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
+.toast p { grid-column: 1 / -1; }

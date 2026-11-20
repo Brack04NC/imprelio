@@ -26,7 +26,7 @@ export function CalendarPanel({ selection, today, items, identity, canCreate, on
     <header className={styles.toolbar}>
       <div className={styles.period}>
         <span className="agenda-heading-icon"><CalendarDays size={20}/></span>
-        <h2 id="calendar-period">{calendarLabel(selection)}</h2>
+        <h2 id="calendar-period" aria-live="polite">{calendarLabel(selection)}</h2>
       </div>
       <div className={styles.controls}>
         <div className={styles.step} role="group" aria-label="Navigazione calendario">

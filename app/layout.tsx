@@ -3,7 +3,7 @@ import '@fontsource-variable/inter';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Imprelio · Cantieri',
+  title: { default: 'Imprelio', template: '%s · Imprelio' },
   description: 'Organizza i cantieri e pianifica gli interventi di ponteggio.',
 };
 

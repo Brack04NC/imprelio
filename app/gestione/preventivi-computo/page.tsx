@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { EstimatePricing } from '@/components/estimate-pricing';
@@ -8,6 +9,8 @@ import { romeDate } from '@/lib/domain';
 import { readPricing } from '@/lib/estimate-pricing-backend';
 import { operationSites } from '@/lib/operations-backend';
 import { demoSiteOptions } from '@/lib/operations-demo';
+
+export const metadata: Metadata = { title: 'Preventivi da PDF' };
 
 export default async function PreventiviComputo({ searchParams }: { searchParams: Promise<{ azienda?: string; cantiere?: string }> }) {
   const query = await searchParams;

@@ -3,51 +3,71 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Archive, ArrowLeft, ArrowUpRight, Boxes, Calculator, ClipboardList, FileText, FileUp, HardHat, Package, Pencil, Plus, RotateCcw, Search, Truck, Users, Warehouse, X } from 'lucide-react';
+import { Archive, ArrowLeft, ArrowUpRight, Boxes, Calculator, ClipboardList, FileText, FileUp, HardHat, Package, Pencil, Plus, RotateCcw, Search, Truck, Users, Warehouse, Wrench, X } from 'lucide-react';
 import { Drawer } from './editor';
 import { SiteFromEstimate } from './site-from-estimate';
 import { Shell, orgLink } from './shell';
+import { useRomeToday } from './use-rome-today';
 import type { Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
 import { demoSiteOptions, localOperations, operationsKey, updateLocalOperation } from '@/lib/operations-demo';
 import { areas, type Definition, type Field, type OperationArea, type OperationKind, type OperationRecord, type OperationWrite, type Option, type SiteOption, type Values } from '@/lib/operation-types';
 import { applicableFields, operationDefinition, validateOperation } from '@/lib/operations';
 import { documentLineQuantity, formatQuantity } from '@/lib/operation-documents';
-import { getWarehouseAvailability, isBelowMinimum } from '@/lib/operation-resources';
+import { formatStockQuantity, getWarehouseAvailability, isBelowMinimum, stockMinimum } from '@/lib/operation-resources';
+import { localVehicleAssignments } from '@/lib/vehicle-assignments';
+import { maintenanceScheduleError, periodsOverlap, vehicleMaintenance, vehicleMaintenanceState } from '@/lib/vehicle-maintenance';
 import styles from './operation-page.module.css';
 
 const icons = { article: Boxes, movement: Truck, employee: Users, worker: HardHat, crew: Users,
   invoice: FileText, order: ClipboardList, ddt: Truck, estimate: Calculator };
 const areaIcons = { magazzino: Warehouse, personale: Users, amministrazione: FileText, 'computi-metrici': Calculator };
 const numberPerPage = 12;
+type Editing = OperationRecord | 'create' | { movementFor: string };
 
 function dateLabel(value: string) {
   return value.split('-').reverse().join('/');
 }
 
-export function OperationPage({ identity, area, today, initial, sites, requestedSite, requestedKind }: {
+const maintenanceLabels = {
+  active: 'In manutenzione', scheduled: 'Manutenzione programmata', past: 'Manutenzione conclusa',
+} as const;
+
+function effectiveStatus(record: OperationRecord, today: string) {
+  const period = vehicleMaintenance(record);
+  return period && vehicleMaintenanceState(period, today) === 'active' ? 'inactive' : record.status;
+}
+
+export function OperationPage({ identity, area, today: initialToday, initial, sites, requestedSite, requestedKind, requestedVehicle }: {
   identity: Identity; area: OperationArea; today: string; initial: OperationRecord[]; sites: SiteOption[];
-  requestedSite?: string; requestedKind?: string;
+  requestedSite?: string; requestedKind?: string; requestedVehicle?: string;
 }) {
   const router = useRouter();
+  const today = useRomeToday(initialToday, area === 'magazzino');
   const section = areas[area];
   const kinds: readonly OperationKind[] = section.kinds;
-  const [kind, setKind] = useState(kinds.find(value => value === requestedKind) ?? kinds[0]);
+  const linkedId = area === 'magazzino' && typeof requestedVehicle === 'string' && /^[a-f0-9-]{36}$/i.test(requestedVehicle)
+    ? requestedVehicle.toLowerCase() : '';
+  const [kind, setKind] = useState(linkedId ? 'article' : kinds.find(value => value === requestedKind) ?? kinds[0]);
+  const [vehicleFilter, setVehicleFilter] = useState(linkedId);
   const [records, setRecords] = useState(initial);
   const [availableSites, setAvailableSites] = useState(sites);
   const [siteFilter, setSiteFilter] = useState(typeof requestedSite === 'string' && /^[a-f0-9-]{36}$/i.test(requestedSite) ? requestedSite : '');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
-  const [archive, setArchive] = useState(false);
+  const [archive, setArchive] = useState(() => Boolean(linkedId && initial.some(record => record.id === linkedId && record.archived)));
   const [page, setPage] = useState(1);
-  const [editor, setEditor] = useState<OperationRecord | 'create' | null>(null);
+  const [editor, setEditor] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error?: boolean }>();
   const focusBack = useRef<HTMLElement | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
   const inFlight = useRef(false);
   const definition = operationDefinition(kind);
   const AreaIcon = areaIcons[area];
   const warehouseAvailability = useMemo(() => area === 'magazzino' ? getWarehouseAvailability(records) : new Map<string, bigint>(), [area, records]);
+  const movementFor = editor && editor !== 'create' && 'movementFor' in editor ? editor.movementFor : '';
+  const editingRecord = editor && editor !== 'create' && 'id' in editor ? editor : undefined;
 
   useEffect(() => {
     if (!identity.demo) {
@@ -64,17 +84,35 @@ export function OperationPage({ identity, area, today, initial, sites, requested
     return () => window.removeEventListener('storage', onStorage);
   }, [identity.demo, initial, sites, today, area]);
 
+  useEffect(() => {
+    if (identity.demo && linkedId && localOperations(today, area).some(record => record.id === linkedId && record.archived))
+      setArchive(true);
+  }, [identity.demo, linkedId, area, today]);
+
+  useEffect(() => {
+    if (area !== 'magazzino' || identity.demo) return;
+    function refreshStock() {
+      if (document.visibilityState === 'visible' && !inFlight.current) router.refresh();
+    }
+    window.addEventListener('focus', refreshStock);
+    return () => window.removeEventListener('focus', refreshStock);
+  }, [area, identity.demo, router]);
+
   function selectKind(value: OperationKind) {
+    if (value !== 'article') setVehicleFilter('');
     setKind(value); setStatus(''); setQuery(''); setPage(1); setNotice(undefined);
   }
 
-  function openView(value: OperationRecord | 'create') {
+  function openView(value: Editing) {
     focusBack.current = document.activeElement as HTMLElement;
     setEditor(value);
   }
   function closeView() {
     setEditor(null);
     requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
+  }
+  function focusNotice() {
+    requestAnimationFrame(() => noticeRef.current?.focus());
   }
 
   async function persist(input: OperationWrite) {
@@ -84,13 +122,20 @@ export function OperationPage({ identity, area, today, initial, sites, requested
       const action = validateOperation(input);
       let record: OperationRecord;
       if (identity.demo) {
+        if (action.action === 'save') {
+          const period = vehicleMaintenance(action);
+          if (period && localVehicleAssignments(today).some(assignment => assignment.vehicle_id === action.id
+            && assignment.periods.some(booking => periodsOverlap(booking, period)))) {
+            throw new Error(maintenanceScheduleError);
+          }
+        }
         record = updateLocalOperation(today, action);
       } else {
         const response = await fetch('/api/operativita?' + new URLSearchParams({ azienda: identity.org.id }), {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(action),
         });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Salvataggio non riuscito.');
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result) throw new Error(result?.error || 'Salvataggio non riuscito. Riprova.');
         const updated_at = new Date().toISOString();
         if (action.action === 'save') {
           const { action: _, ...saved } = action;
@@ -102,8 +147,17 @@ export function OperationPage({ identity, area, today, initial, sites, requested
         router.refresh();
       }
       setRecords(previous => [record, ...previous.filter(item => item.id !== record.id)]);
+      if (action.action === 'save' && action.kind === kind) {
+        setArchive(false);
+        setPage(1);
+        if (status && status !== effectiveStatus(record, today)) setStatus('');
+        if (filterBySite && filterBySite.id !== record.site_id) setSiteFilter('');
+        if (vehicleFilter && vehicleFilter !== record.id) setVehicleFilter('');
+        if (!matchesSearch(record)) setQuery('');
+      }
       setNotice({ text: action.action === 'archive' ? 'Scheda archiviata.' : action.action === 'restore' ? 'Scheda ripristinata.' : 'Scheda salvata.' });
-      if (editor) closeView();
+      if (editor) setEditor(null);
+      focusNotice();
     } finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -111,18 +165,34 @@ export function OperationPage({ identity, area, today, initial, sites, requested
   const siteById = new Map(availableSites.map(site => [site.id, site]));
   const needle = query.trim().toLocaleLowerCase('it');
   const filterBySite = definition.site !== 'none' && selectedSite;
+  const filterByVehicle = kind === 'article' && vehicleFilter;
+  const linkedVehicle = filterByVehicle && records.find(record => record.id === vehicleFilter && record.kind === 'article'
+    && record.fields.category === 'vehicles');
+  const hasFilters = Boolean(needle || status || filterBySite || filterByVehicle);
   const active = records.filter(record => record.kind === kind && !record.archived).length;
   const archived = records.filter(record => record.kind === kind && record.archived).length;
+  function matchesSearch(record: OperationRecord) {
+    return !needle || [record.title, ...Object.values(record.fields), siteById.get(record.site_id ?? '')?.name]
+      .some(value => value?.toLocaleLowerCase('it').includes(needle));
+  }
   const filtered = records.filter(record => record.kind === kind && record.archived === archive
-    && (!filterBySite || record.site_id === filterBySite.id) && (!status || record.status === status)
-    && (!needle || [record.title, ...Object.values(record.fields), siteById.get(record.site_id ?? '')?.name]
-      .some(value => value?.toLocaleLowerCase('it').includes(needle))))
+    && (!filterBySite || record.site_id === filterBySite.id) && (!filterByVehicle || linkedVehicle && record.id === linkedVehicle.id)
+    && (!status || effectiveStatus(record, today) === status) && matchesSearch(record))
     .sort((first, second) => second.updated_at.localeCompare(first.updated_at) || first.title.localeCompare(second.title, 'it'));
   const pageCount = Math.max(1, Math.ceil(filtered.length / numberPerPage));
   const shownPage = Math.min(page, pageCount);
   const shown = filtered.slice((shownPage - 1) * numberPerPage, shownPage * numberPerPage);
   const articles = records.filter(record => record.kind === 'article' && !record.archived)
     .map(record => ({ value: record.id, label: record.title + (record.fields.unit ? ' · ' + record.fields.unit : '') }));
+  const needsArticle = kind === 'movement' && !articles.length;
+
+  function openCreate() {
+    if (needsArticle) {
+      selectKind('article');
+      setArchive(false);
+    }
+    openView('create');
+  }
 
   return <Shell identity={identity} section={area}>
     {selectedSite && <Link className="button text-button back-link" href={orgLink('/cantieri/' + selectedSite.id, identity)}>
@@ -135,8 +205,8 @@ export function OperationPage({ identity, area, today, initial, sites, requested
         {(area === 'magazzino' || area === 'personale') && <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli', identity)}>
           <Truck size={18}/> Assegnazioni veicoli
         </Link>}
-        {kind !== 'estimate' && <button className="button primary" onClick={() => openView('create')}>
-          <Plus size={19}/> Aggiungi {definition.singular.toLocaleLowerCase('it')}
+        {kind !== 'estimate' && <button className="button primary" disabled={busy} onClick={openCreate}>
+          <Plus size={19}/> Aggiungi {needsArticle ? 'articolo' : definition.singular.toLocaleLowerCase('it')}
         </button>}
       </div>
     </header>
@@ -167,53 +237,93 @@ export function OperationPage({ identity, area, today, initial, sites, requested
       <div className={styles.listHeading}><div><h2 id="operation-list-heading">{kind === 'estimate' ? 'Elenco computi' : definition.plural}</h2>
         {kind !== 'estimate' && <p>{definition.description}</p>}</div>
         <div className={styles.listActions}>
-          {kind === 'estimate' && <button className="button primary" onClick={() => openView('create')}>
+          {kind === 'estimate' && <button className="button primary" disabled={busy} onClick={openCreate}>
             <Plus size={18}/> Aggiungi computo metrico
           </button>}
           <button className="button secondary" aria-pressed={archive} onClick={() => { setArchive(!archive); setPage(1); setNotice(undefined); }}>
             <Archive size={17}/>{archive ? `Attive (${active})` : `Archiviate (${archived})`}</button>
         </div>
       </div>
-      <div className={styles.filters}>
+      <div className={`${styles.filters} ${definition.statuses.length === 1 || definition.site === 'none' ? styles.condensedFilters : ''}`}>
         <label><span>Cerca</span><span className={styles.searchInput}><Search size={17}/><input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Cerca nelle schede"/></span></label>
-        <label><span>Stato</span><select value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
+        {definition.statuses.length > 1 && <label><span>Stato</span><select aria-label="Stato" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
           <option value="">Tutti gli stati</option>{definition.statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select></label>
+        </select></label>}
         {definition.site !== 'none' && <label><span>Cantiere</span><select value={selectedSite?.id ?? ''} onChange={event => { setSiteFilter(event.target.value); setPage(1); }}>
           <option value="">Tutti i cantieri</option>{availableSites.map(site => <option key={site.id} value={site.id}>{site.name} · {site.city}</option>)}
         </select></label>}
       </div>
-      {notice && <p role={notice.error ? 'alert' : 'status'} className={notice.error ? 'form-error' : styles.notice}>{notice.text}</p>}
+      {linkedVehicle && <div className={styles.linkedVehicle}>
+        <span>Veicolo selezionato <strong>{linkedVehicle.title}</strong></span>
+        <button type="button" className="button text-button" onClick={() => { setVehicleFilter(''); setPage(1); }}>Mostra tutti gli articoli</button>
+      </div>}
+      {notice && <p ref={noticeRef} tabIndex={-1} role={notice.error ? 'alert' : 'status'} className={notice.error ? 'form-error' : styles.notice}>{notice.text}</p>}
       {shown.length > 0 ? <ul className={styles.cards}>{shown.map(record => {
         const Icon = icons[record.kind];
         const site = siteById.get(record.site_id ?? '');
-        const low = record.kind === 'article' && isBelowMinimum(record, warehouseAvailability.get(record.id) ?? 0n);
+        const available = warehouseAvailability.get(record.id) ?? 0n;
+        const low = record.kind === 'article' && isBelowMinimum(record, available);
+        const isVehicle = record.kind === 'article' && record.fields.category === 'vehicles';
+        const period = vehicleMaintenance(record);
+        const maintenanceState = period ? vehicleMaintenanceState(period, today) : null;
+        const cardStatus = maintenanceState === 'active' ? 'inactive' : record.status;
         return <li key={record.id} className={styles.record}>
           <div className={styles.recordHead}><span className={styles.recordIcon}><Icon size={19}/></span>
-            <span className={styles.badge}>{definition.statuses.find(item => item.value === record.status)?.label ?? record.status}</span></div>
+            <span className={`${styles.badge} ${maintenanceState === 'active' ? styles.maintenanceBadge : ''}`}>
+              {definition.statuses.find(item => item.value === cardStatus)?.label ?? cardStatus}</span></div>
           <h3>{record.title}</h3>
           {record.record_date && <time dateTime={record.record_date}>{dateLabel(record.record_date)}</time>}
-          {definition.summary?.(record, records, warehouseAvailability).filter(Boolean).map((value, index) => <p key={index} className={styles.summary}>{value}</p>)}
+          {definition.summary?.(record, records).filter(Boolean).map((value, index) => <p key={index} className={styles.summary}>{value}</p>)}
+          {record.kind === 'article' && <dl className={styles.stock}>
+            <div><dt>{isVehicle ? 'Giacenza' : 'Disponibilità'}</dt><dd>{formatStockQuantity(available)} {record.fields.unit}</dd></div>
+            <div><dt>Scorta minima</dt><dd>{formatStockQuantity(stockMinimum(record))} {record.fields.unit}</dd></div>
+          </dl>}
+          {period && maintenanceState && <div className={`${styles.maintenanceCard} ${styles[maintenanceState]}`}>
+            <Wrench size={15} aria-hidden="true"/>
+            <div><strong>{maintenanceLabels[maintenanceState]}</strong>
+              <span>Dal <time dateTime={period.start_date}>{dateLabel(period.start_date)}</time> al <time dateTime={period.end_date}>{dateLabel(period.end_date)}</time></span>
+            </div>
+          </div>}
           {low && <span className={styles.low}>Sotto scorta minima</span>}
           {site && <Link className={styles.site} href={orgLink('/cantieri/' + site.id, identity)}>{site.name}<ArrowUpRight size={14}/></Link>}
           <div className={styles.recordActions}>
-            <button className="button secondary" onClick={() => openView(record)}><Pencil size={15}/>{record.archived ? 'Apri' : 'Modifica'}</button>
+            <button className="button secondary" disabled={busy} onClick={() => openView(record)}><Pencil size={15}/>{record.archived ? 'Apri' : 'Modifica'}</button>
+            {record.kind === 'article' && !record.archived && <button type="button" className="button secondary" disabled={busy}
+              onClick={() => openView({ movementFor: record.id })}><Boxes size={15}/> Carico / scarico</button>}
+            {isVehicle && record.status === 'active' && !record.archived &&
+              <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli?veicolo=' + record.id, identity)}>
+                <Truck size={15}/> {maintenanceState === 'active' ? 'Assegna per altre date' : 'Assegna'}
+              </Link>}
             <button className="button text-button" disabled={busy} onClick={() => {
               void persist({ action: record.archived ? 'restore' : 'archive', id: record.id, kind: record.kind })
-                .catch(error => setNotice({ text: error instanceof Error ? error.message : 'Operazione non riuscita.', error: true }));
+                .catch(error => {
+                  setNotice({ text: error instanceof Error ? error.message : 'Operazione non riuscita.', error: true });
+                  focusNotice();
+                });
             }}>{record.archived ? <RotateCcw size={15}/> : <Archive size={15}/>}
               {record.archived ? 'Ripristina' : 'Archivia'}</button>
           </div>
         </li>;
-      })}</ul> : <div className={styles.empty}><Package size={29}/><strong>Nessuna scheda {archive ? 'archiviata' : 'trovata'}</strong>
-        <p>{query || status || filterBySite ? 'Cambia i filtri per vedere altre schede.' : archive ? 'Le schede archiviate compariranno qui.' : 'Aggiungi la prima scheda per iniziare.'}</p></div>}
+      })}</ul> : <div className={styles.empty}>
+        <Package size={29}/>
+        <strong>{hasFilters ? 'Nessun risultato' : archive ? 'Nessuna scheda archiviata' : 'Nessuna scheda'}</strong>
+        {hasFilters ? <>
+          <p>{filterByVehicle && !linkedVehicle ? 'Il veicolo collegato non è disponibile.' : 'Prova senza i filtri attuali.'}</p>
+          <button type="button" className="button secondary" onClick={() => {
+            setQuery(''); setStatus(''); setSiteFilter(''); setVehicleFilter(''); setPage(1);
+          }}>Azzera filtri</button>
+        </> : <p>{archive ? 'Le schede archiviate compariranno qui.' : needsArticle
+          ? 'Aggiungi un articolo prima di registrare un carico o uno scarico.' : 'Aggiungi la prima scheda per iniziare.'}</p>}
+      </div>}
       {pageCount > 1 && <div className={styles.pagination}><span>Pagina {shownPage} di {pageCount}</span>
         <button className="button secondary" disabled={shownPage <= 1} onClick={() => setPage(shownPage - 1)}>Indietro</button>
         <button className="button secondary" disabled={shownPage >= pageCount} onClick={() => setPage(shownPage + 1)}>Avanti</button>
       </div>}
     </section>
-    {editor && <OperationEditor definition={definition} record={editor === 'create' ? undefined : editor} today={today}
-      identity={identity} sites={availableSites} articles={articles} selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}
+    {editor && <OperationEditor key={kind + ':' + (movementFor || editingRecord?.id || 'new')}
+      definition={movementFor ? operationDefinition('movement') : definition} record={editingRecord} today={today}
+      identity={identity} sites={availableSites} articles={articles} movementFor={movementFor}
+      selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}
       onSiteCreated={site => setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)])}/>}
   </Shell>;
 }
@@ -232,16 +342,16 @@ function InputField({ field, value, change, articles = [] }: {
   }
   if (field.type === 'textarea') return <label>{field.label}<textarea rows={3} maxLength={2000} required={field.required} value={value}
     placeholder={field.placeholder} onChange={event => change(event.target.value)}/></label>;
-  return <label>{field.label}<input type={field.type === 'number' ? 'text' : field.type ?? 'text'}
+  return <label data-field={field.key}>{field.label}<input type={field.type === 'number' ? 'text' : field.type ?? 'text'}
     inputMode={field.type === 'number' ? (field.decimals ? 'decimal' : 'numeric') : undefined}
     required={field.required} maxLength={field.type === 'number' ? 14 : 2000} value={value}
     placeholder={field.placeholder} onChange={event => change(event.target.value)}/></label>;
 }
 
-function OperationEditor({ definition, record, today, identity, sites, articles, selectedSite, onClose, save, onSiteCreated }: {
+function OperationEditor({ definition, record, today, identity, sites, articles, movementFor, selectedSite, onClose, save, onSiteCreated }: {
   definition: Definition; record?: OperationRecord; today: string; sites: SiteOption[]; articles: Option[];
   identity: Identity; onSiteCreated: (site: SiteOption) => void;
-  selectedSite: string; onClose: () => void; save: (action: OperationWrite) => Promise<void>;
+  movementFor: string; selectedSite: string; onClose: () => void; save: (action: OperationWrite) => Promise<void>;
 }) {
   const lineFields = definition.lineFields ?? [];
   const [title, setTitle] = useState(record?.title ?? '');
@@ -251,27 +361,61 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
   const [siteEditor, setSiteEditor] = useState(false);
   const [siteNotice, setSiteNotice] = useState('');
   const siteSelect = useRef<HTMLSelectElement>(null);
-  const [fields, setFields] = useState(() => initialValues(definition.fields, record?.fields));
+  const [fields, setFields] = useState(() => initialValues(definition.fields, record?.fields ?? { article_id: movementFor }));
+  const [maintenance, setMaintenance] = useState(() => {
+    const period = record ? vehicleMaintenance(record) : null;
+    return { enabled: Boolean(period), start_date: period?.start_date ?? '', end_date: period?.end_date ?? '' };
+  });
   const [lines, setLines] = useState(() => (record?.lines ?? (lineFields.length ? [{}] : []))
     .map((row, key) => ({ key, fields: initialValues(lineFields, row) })));
   const rowId = useRef(lines.length);
+  const descriptionToFocus = useRef<number | null>(null);
+  const lineList = useRef<HTMLElement>(null);
+  const addLineButton = useRef<HTMLButtonElement>(null);
   const identifier = useRef(record?.id ?? '');
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ text: string } | null>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const hint = definition.totals?.(fields, lines.map(line => line.fields));
   const readOnly = Boolean(record?.archived);
+  const isVehicle = definition.kind === 'article' && fields.category === 'vehicles';
+
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  useEffect(() => {
+    const key = descriptionToFocus.current;
+    if (key === null) return;
+    lineList.current?.querySelector<HTMLInputElement>(`[data-line-key="${key}"] [data-field="description"] input`)?.focus();
+    descriptionToFocus.current = null;
+  }, [lines]);
+
+  function addLine() {
+    const key = rowId.current++;
+    descriptionToFocus.current = key;
+    setLines(previous => [...previous, { key, fields: initialValues(lineFields) }]);
+  }
+
+  function removeLine(key: number, index: number) {
+    const remaining = lines.filter(row => row.key !== key);
+    descriptionToFocus.current = remaining[Math.min(index, remaining.length - 1)]?.key ?? null;
+    setLines(remaining);
+    if (!remaining.length) addLineButton.current?.focus();
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (inFlight.current || readOnly) return;
-    inFlight.current = true; setBusy(true); setError('');
+    inFlight.current = true; setBusy(true); setError(null);
     try {
       identifier.current ||= crypto.randomUUID();
+      const savedFields = definition.kind === 'article' ? { ...fields,
+        maintenance_from: isVehicle && maintenance.enabled ? maintenance.start_date : '',
+        maintenance_to: isVehicle && maintenance.enabled ? maintenance.end_date : '',
+      } : fields;
       await save({ action: 'save', id: identifier.current, kind: definition.kind, title, status, site_id: site || null,
-        record_date: date || null, fields, lines: lines.map(line => line.fields) });
+        record_date: date || null, fields: savedFields, lines: lines.map(line => line.fields) });
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Salvataggio non riuscito.');
+      setError({ text: failure instanceof Error ? failure.message : 'Salvataggio non riuscito.' });
     } finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -287,9 +431,9 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
       <div className="drawer-fields">
         <fieldset className={`form-grid ${styles.editorFields}`} disabled={busy || readOnly}>
           <label>{definition.titleLabel}<input autoFocus maxLength={160} required value={title} onChange={event => setTitle(event.target.value)}/></label>
-          <div className="form-pair">
-            <label>Stato<select aria-label="Stato" value={status} onChange={event => setStatus(event.target.value)}>
-              {definition.statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <div className={definition.statuses.length > 1 && definition.dateLabel ? 'form-pair' : undefined}>
+            {definition.statuses.length > 1 && <label>Stato<select aria-label="Stato" value={status} onChange={event => setStatus(event.target.value)}>
+              {definition.statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
             {definition.dateLabel && <label>{definition.dateLabel}<input type="date" required={definition.dateRequired} value={date} onChange={event => setDate(event.target.value)}/></label>}
           </div>
           {definition.site !== 'none' && <div className="client-input">
@@ -305,31 +449,44 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
           </div>}
           {applicableFields(definition.fields, fields).map(field => <InputField key={field.key} field={field} value={fields[field.key]}
             articles={articles} change={value => setFields(previous => ({ ...previous, [field.key]: value }))}/>)}
-          {lineFields.length > 0 && <section className={styles.lines} aria-label="Righe">
+          {isVehicle && <section className={styles.maintenanceEditor}>
+            <label className={styles.maintenanceToggle}><input type="checkbox" checked={maintenance.enabled} onChange={event => {
+              const enabled = event.target.checked;
+              setMaintenance(current => ({ enabled, start_date: current.start_date || today, end_date: current.end_date || today }));
+            }}/><span>Manutenzione (meccanico)</span></label>
+            {maintenance.enabled && <>
+              <div className={`form-pair ${styles.maintenanceDates}`}>
+                <label>Inizio manutenzione<input type="date" required value={maintenance.start_date}
+                  onChange={event => setMaintenance({ ...maintenance, start_date: event.target.value })}/></label>
+                <label>Fine manutenzione<input type="date" required min={maintenance.start_date || undefined} value={maintenance.end_date}
+                  onChange={event => setMaintenance({ ...maintenance, end_date: event.target.value })}/></label>
+              </div>
+              <p className={styles.maintenanceHelp}>Il veicolo risulta fuori uso nelle date indicate, estremi inclusi. Dal giorno successivo torna automaticamente allo stato impostato nella scheda.</p>
+            </>}
+          </section>}
+          {lineFields.length > 0 && <section ref={lineList} className={styles.lines} aria-label="Righe">
             <div className={styles.lineHead}><h3>{definition.kind === 'estimate' ? 'Misurazioni' : 'Righe del documento'}</h3>
-              {!readOnly && <button className="button secondary" type="button" disabled={lines.length >= 100} onClick={() => {
-                const key = rowId.current++;
-                setLines(previous => [...previous, { key, fields: initialValues(lineFields) }]);
-              }}><Plus size={16}/> Aggiungi riga</button>}</div>
+              {!readOnly && <button ref={addLineButton} className="button secondary" type="button" disabled={lines.length >= 100} onClick={addLine}>
+                <Plus size={16}/> Aggiungi riga</button>}</div>
             {lines.map((row, index) => {
               const measured = definition.kind === 'estimate' ? documentLineQuantity('estimate', row.fields) : null;
-              return <fieldset key={row.key} className={styles.line}>
+              return <fieldset key={row.key} data-line-key={row.key} className={styles.line}>
                 <legend>Riga {index + 1}</legend>
                 <div className={styles.lineFields}>{lineFields.map(field => <InputField key={field.key} field={field} value={row.fields[field.key]}
                   change={value => setLines(previous => previous.map(entry => entry.key === row.key
                     ? { ...entry, fields: { ...entry.fields, [field.key]: value } } : entry))}/>)}</div>
                 {measured !== null && <small>Quantità misura {formatQuantity(measured)} {row.fields.unit}</small>}
                 {!readOnly && <button type="button" className="button text-button" aria-label={`Rimuovi riga ${index + 1}`}
-                  onClick={() => setLines(previous => previous.filter(entry => entry.key !== row.key))}><X size={15}/> Rimuovi</button>}
+                  onClick={() => removeLine(row.key, index)}><X size={15}/> Rimuovi</button>}
               </fieldset>;
             })}
             {hint && <dl className={styles.totals} aria-label="Riepilogo calcoli">{hint.map(item =>
               <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>}
           </section>}
         </fieldset>
-        {error && <p className="form-error" role="alert">{error}</p>}
+        {error && <p ref={errorRef} tabIndex={-1} className={`form-error ${styles.editorError}`} role="alert">{error.text}</p>}
       </div>
-      <footer className="drawer-footer"><button type="button" disabled={busy} className="button secondary" onClick={onClose}>{readOnly ? 'Chiudi' : 'Annulla'}</button>
+      <footer className="drawer-footer"><button type="button" disabled={busy} className="button secondary" onClick={onClose}>{readOnly ? 'Torna all’elenco' : 'Annulla'}</button>
         {!readOnly && <button type="submit" className="button primary" disabled={busy}>{busy ? 'Salvataggio…' : 'Salva scheda'}</button>}</footer>
     </form>
   </Drawer>

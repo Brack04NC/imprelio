@@ -215,6 +215,8 @@ kbd { font: inherit; font-size: 11px; border: 1px solid #e0e6f0; background: #ff
 .drawer-header { justify-content: space-between; }
 .drawer-header h2 { font-size: 22px; letter-spacing: -.03em; }
 .drawer-footer { justify-content: flex-end; border-bottom: 0; border-top: 1px solid var(--line); padding-bottom: max(15px, env(safe-area-inset-bottom)); }
+.drawer-footer:has(.drawer-delete) { flex-wrap: wrap; }
+.button.drawer-delete { margin-inline-end: auto; color: #8b2a24; }
 .editor-form { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .form-grid { display: grid; gap: 14px; min-width: 0; }
 .drawer-fields { display: grid; align-content: start; flex: 1; border: 0; margin: 0; padding: 20px 22px; overflow: auto; }
@@ -244,30 +246,25 @@ kbd { font: inherit; font-size: 11px; border: 1px solid #e0e6f0; background: #ff
   .metric-arrow { width: 14px; }
 }
 
-@media (max-width: 1060px) and (min-width: 761px) {
-  .app-shell { grid-template-columns: 70px minmax(0, 1fr); }
-  .sidebar { padding: 20px 10px; }
-  .sidebar .brand { padding: 0 3px; }
-  .sidebar .brand > span + span, .sidebar .sidebar-footer > div + div, .sidebar .nav-label, .sidebar .nav-upcoming { display: none; }
-  .sidebar .nav-link { font-size: 0; justify-content: center; padding: 0; gap: 0; }
-  .sidebar .sidebar-footer { padding-left: 7px; }
-}
-
 @media (max-width: 890px) {
   .site-table th:nth-child(2), .site-table .row-client { display: none; }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1060px) {
   .app-shell { display: block; }
   .sidebar { display: none; }
   .menu-trigger { display: inline-grid !important; margin-left: -8px; }
   .mobile-nav[open] { position: fixed; display: block !important; inset: 0 auto 0 0; border: 0; padding: 0; margin: 0; height: 100dvh; max-height: none; max-width: calc(100vw - 36px); width: 270px; background: var(--nav); }
   .mobile-nav-content { padding-top: 21px; }
   .nav-close { position: absolute; top: 20px; right: 9px; color: #c6d4ea; }
+}
+
+@media (max-width: 760px) {
   .topbar { min-height: 57px; padding: 0 16px; }
   .content { padding: 15px 16px 28px; }
   .breadcrumbs, .top-actions { gap: 7px; }
-  .breadcrumb-root, .breadcrumb-icon, .global-search span, .global-search kbd, .profile-name, .profile-chevron { display: none; }
+  .breadcrumb-root, .breadcrumb-icon, .global-search kbd, .profile-chevron { display: none; }
+  .global-search .search-caption, .profile-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .global-search { min-width: 44px; min-height: 44px; justify-content: center; }
   .profile summary { justify-content: center; min-width: 44px; }
   .hero { min-height: 166px; padding: 17px; border-radius: 14px; background-image: url('/images/ponteggi-mobile.webp'); background-position: 60% center; }
