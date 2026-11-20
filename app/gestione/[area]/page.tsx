@@ -38,7 +38,7 @@ export default async function OperationalArea({ params, searchParams }: {
   const sites = db ? await operationSites(db, identity.org.id) : demoSiteOptions(today);
   const vehicle = area === 'magazzino' && typeof query.veicolo === 'string' ? query.veicolo : undefined;
   const parsedRecord = z.uuid().safeParse(query.scheda);
-  const record = (area === 'amministrazione' || area === 'computi-metrici') && parsedRecord.success ? parsedRecord.data.toLowerCase() : undefined;
+  const record = parsedRecord.success ? parsedRecord.data.toLowerCase() : undefined;
   return <OperationPage key={JSON.stringify([identity.org.id, area, query.cantiere, query.tipo, vehicle, record])} identity={identity}
     area={area} today={today} initial={result} sites={sites} requestedSite={query.cantiere} requestedKind={query.tipo}
     requestedVehicle={vehicle} requestedRecord={record}/>;

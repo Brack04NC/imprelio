@@ -24,7 +24,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       <Image src="/brand/imprelio-simbolo-originale.png" alt="" width={64} height={64} className="login-logo" unoptimized/>
       <h1>Accedi a Imprelio</h1>
       {errore && messages[errore] && <p className="form-error" role="alert">{messages[errore]}</p>}
-      {demoMode ? <Link className="button primary" href="/cantieri">Apri la demo <ArrowRight size={17} /></Link> :
+      {demoMode ? <Link className="button primary" href="/">Apri la demo <ArrowRight size={17} /></Link> :
         <form className="form-grid" action={signIn}>
           <label>Email aziendale<input required type="email" name="email" placeholder="nome@azienda.it" maxLength={254} autoComplete="email" /></label>
           <label>Password<input required type="password" name="password" minLength={8} maxLength={128} autoComplete="current-password" /></label>

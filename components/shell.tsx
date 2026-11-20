@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
+import { Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, LayoutDashboard, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
@@ -22,7 +22,7 @@ const modules = [
   { section: 'bilanci', label: 'Bilanci e conti', href: '/gestione/bilanci', icon: Wallet },
   { section: 'cestino', label: 'Cestino', href: '/gestione/cestino', icon: Trash2 },
 ] as const;
-type ShellSection = 'cantieri' | 'agenda' | 'notifiche' | 'accessi' | typeof modules[number]['section'];
+type ShellSection = 'dashboard' | 'cantieri' | 'agenda' | 'notifiche' | 'accessi' | typeof modules[number]['section'];
 
 export function orgLink(path: string, identity: Identity) {
   if (identity.orgs.length < 2) return path;
@@ -68,20 +68,23 @@ export function Shell({ identity, section, detail, onSearch, children }: {
     };
   }, []);
   const initials = identity.name.split(/[ ._-]+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'IM';
+  const home = orgLink('/', identity);
   const overview = orgLink('/cantieri', identity);
   const agenda = orgLink('/agenda', identity);
   const notifications = orgLink('/notifiche', identity);
   const access = orgLink('/accessi', identity);
-  const sectionLabel = section === 'cantieri' ? 'Cantieri' : section === 'agenda' ? 'Agenda'
+  const sectionLabel = section === 'dashboard' ? 'Dashboard' : section === 'cantieri' ? 'Cantieri' : section === 'agenda' ? 'Agenda'
     : section === 'notifiche' ? 'Notifiche' : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
   function sidebar() {
     return <>
-      <Link href={overview} className="brand" onClick={() => mobile.current?.close()}>
+      <Link href={home} prefetch={false} className="brand" onClick={() => mobile.current?.close()}>
         <Image src="/brand/imprelio-simbolo-originale.png" alt="" width={44} height={44} className="brand-icon" unoptimized/>
         <span>Imprelio<small>Gestione cantieri</small></span>
       </Link>
       <nav className="nav-main" aria-label="Menu principale">
         <p className="nav-label">OPERATIVITÀ</p>
+        <Link href={home} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'dashboard' ? 'page' : undefined}
+          className={'nav-link ' + (section === 'dashboard' ? 'nav-active' : '')}><LayoutDashboard size={19} aria-hidden="true"/> Dashboard</Link>
         <Link href={overview} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
         <Link href={agenda} onClick={() => mobile.current?.close()} aria-current={section === 'agenda' ? 'page' : undefined}
           className={'nav-link ' + (section === 'agenda' ? 'nav-active' : '')}><CalendarDays size={18} /> Agenda</Link>
@@ -136,7 +139,7 @@ export function Shell({ identity, section, detail, onSearch, children }: {
             <div className="profile-menu">
               <strong>{identity.name}</strong>
               <small>{identity.demo ? 'Profilo dimostrativo' : identity.email}</small>
-              {identity.orgs.length > 1 && identity.orgs.map(org => <Link key={org.id} href={'/cantieri?azienda=' + org.id}><ArrowUpRight size={16}/> {org.name}</Link>)}
+              {identity.orgs.length > 1 && identity.orgs.map(org => <Link key={org.id} prefetch={false} href={'/?azienda=' + org.id}><ArrowUpRight size={16}/> {org.name}</Link>)}
               {identity.org.role === 'admin' && <Link href={access}><ShieldCheck size={16} /> Gestione accessi</Link>}
               {!identity.demo && <form action={signOut}><button><LogOut size={16} /> Esci</button></form>}
             </div>

@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const { error: activationError } = await db.rpc('claim_imprelio_invitations');
       if (activationError) return NextResponse.redirect(new URL('/login?errore=attivazione', authRedirect()));
-      return NextResponse.redirect(new URL('/cantieri', authRedirect()));
+      return NextResponse.redirect(new URL('/', authRedirect()));
     }
   }
   return NextResponse.redirect(new URL('/login?errore=link', authRedirect()));

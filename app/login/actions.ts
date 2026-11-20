@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { database, demoMode } from '@/lib/backend';
 
 export async function signIn(form: FormData) {
-  if (demoMode) redirect('/cantieri');
+  if (demoMode) redirect('/');
   const result = z.object({
     email: z.email(),
     password: z.string().min(8).max(128),
@@ -18,7 +18,7 @@ export async function signIn(form: FormData) {
   const db = await database();
   const { error } = await db.auth.signInWithPassword(result.data);
   if (error) redirect('/login?errore=credenziali');
-  redirect('/cantieri');
+  redirect('/');
 }
 
 export async function signOut() {
