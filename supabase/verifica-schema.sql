@@ -162,6 +162,7 @@ riferimento(tipo, oggetto, firma) as (values
   ('funzione', 'imprelio_private.can_access_estimate_pdf(text, boolean)', '1c2c97b3edcff595cc12f4cddd885b62'),
   ('funzione', 'imprelio_private.check_live_record()', 'cfe2286db43cbcd4ee677c4d01572f24'),
   ('funzione', 'imprelio_private.check_vehicle_maintenance()', '18ea75f6a821115b9a059e28f9b5eb84'),
+  ('funzione', 'imprelio_private.check_vehicle_stock()', 'f250dbd4bf240e03ca791b61834a3e47'),
   ('funzione', 'imprelio_private.document_file_suffix(text)', '9d78b5f0d251d4ae59d765def7ebd530'),
   ('funzione', 'imprelio_private.has_access(uuid, boolean)', 'ae8a44507e143f47642957dbb7bb3198'),
   ('funzione', 'imprelio_private.imprelio_finish_estimate_pdf(uuid, uuid)', '059494e7de77db64c75e74b0c524d80e'),
@@ -320,6 +321,7 @@ riferimento(tipo, oggetto, firma) as (values
   ('trigger', 'public.interventions.interventions_prevent_trashed_insert', 'ff2509eac950c961dc26a990540e1dab'),
   ('trigger', 'public.operation_records.a_cestino_live_write', '0d4e9f60b13e12eb8b6cc2fa1e7f87fc'),
   ('trigger', 'public.operation_records.operation_records_vehicle_maintenance', '184f912be1f389694a8db63fba65d55b'),
+  ('trigger', 'public.operation_records.operation_records_vehicle_stock_guard', '5b70ef614c163f98fd87ba21e7e1a221'),
   ('trigger', 'public.sites.a_cestino_live_write', 'b8bbbb70ccfa4954ecd2b7e52c0c2a9b'),
   ('trigger', 'public.sites.sites_require_client', '088371334b251a9bf1d6bd3ca9f200ae'),
   ('trigger', 'public.vehicle_assignments.a_cestino_live_write', '19aa0b2327281c81597a4dacdb05408b'),
@@ -411,6 +413,7 @@ riferimento(tipo, oggetto, firma) as (values
   ('vincolo', 'public.operation_records.operation_records_pkey', 'b3ccca97531cea579a51536550a376db'),
   ('vincolo', 'public.operation_records.operation_records_status_check', 'fc18ce8ffeaae00ec3d5ebc4881b3b2a'),
   ('vincolo', 'public.operation_records.operation_records_title_check', '5831f87a623e72b1dbcbf8f85847025b'),
+  ('vincolo', 'public.operation_records.operation_records_vehicle_has_no_stock', '9f8be3cc83b8442159571b952752176b'),
   ('vincolo', 'public.organization_members.organization_members_organization_id_fkey', '27650037b4d37e1588a059bfd94be347'),
   ('vincolo', 'public.organization_members.organization_members_pkey', '5a0d898fb153c21d15ae5488712172f5'),
   ('vincolo', 'public.organization_members.organization_members_role_check', 'd1d6a6af186b1f6cd901f38c087c4945'),
@@ -563,6 +566,6 @@ attuale as (
 )
 select
   case when exists (select 1 from differenze) then 'SCHEMA_DA_VERIFICARE' else 'OK' end as esito,
-  '202611180019' as migrazione_attesa,
+  '202611180020' as migrazione_attesa,
   (select count(*) from riferimento) as controlli,
   coalesce((select jsonb_agg(to_jsonb(d) order by d.tipo, d.oggetto) from differenze d), '[]'::jsonb) as differenze;

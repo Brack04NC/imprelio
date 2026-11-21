@@ -17,7 +17,7 @@ import { demoSiteOptions, localOperations, operationsKey, updateLocalOperation }
 import { areas, type Definition, type Field, type OperationArea, type OperationKind, type OperationRecord, type OperationWrite, type Option, type SiteOption, type Values } from '@/lib/operation-types';
 import { applicableFields, operationDefinition, validateOperation } from '@/lib/operations';
 import { documentLineQuantity, formatQuantity } from '@/lib/operation-documents';
-import { formatStockQuantity, getWarehouseAvailability, isBelowMinimum, stockMinimum } from '@/lib/operation-resources';
+import { formatStockQuantity, getWarehouseAvailability, isBelowMinimum, isStockArticle, isVehicleArticle, stockMinimum } from '@/lib/operation-resources';
 import { demoTrashKey } from '@/lib/trash-storage';
 import { localVehicleAssignments } from '@/lib/vehicle-assignments';
 import { maintenanceScheduleError, periodsOverlap, vehicleMaintenance, vehicleMaintenanceState } from '@/lib/vehicle-maintenance';
@@ -87,6 +87,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const definition = operationDefinition(kind);
   const AreaIcon = areaIcons[area];
   const warehouseAvailability = useMemo(() => area === 'magazzino' ? getWarehouseAvailability(records) : new Map<string, bigint>(), [area, records]);
+  const warehouseVehicles = useMemo(() => new Set(records.filter(isVehicleArticle).map(record => record.id)), [records]);
   const movementFor = editor && editor !== 'create' && 'movementFor' in editor ? editor.movementFor : '';
   const editingRecord = editor && editor !== 'create' && 'id' in editor ? editor : undefined;
   const returnToVehicle = Boolean(editVehicle && editingRecord?.id === linkedId);
@@ -229,8 +230,14 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const pageCount = Math.max(1, Math.ceil(filtered.length / numberPerPage));
   const shownPage = Math.min(page, pageCount);
   const shown = filtered.slice((shownPage - 1) * numberPerPage, shownPage * numberPerPage);
-  const articles = records.filter(record => record.kind === 'article' && !record.archived)
+  const articles = records.filter(record => isStockArticle(record) && !record.archived)
     .map(record => ({ value: record.id, label: record.title + (record.fields.unit ? ' · ' + record.fields.unit : '') }));
+  const historicalArticle = editingRecord?.archived && editingRecord.kind === 'movement'
+    ? records.find(record => record.kind === 'article' && record.id === editingRecord.fields.article_id)
+    : undefined;
+  const editorArticles = historicalArticle && !articles.some(article => article.value === historicalArticle.id)
+    ? [...articles, { value: historicalArticle.id, label: historicalArticle.title }]
+    : articles;
   const needsArticle = kind === 'movement' && !articles.length;
   const selectedVisible = shown.some(record => record.id === requestedRecord);
 
@@ -343,8 +350,10 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         const site = siteById.get(record.site_id ?? '');
         const siteHref = site && orgLink('/cantieri/' + site.id, identity);
         const available = warehouseAvailability.get(record.id) ?? 0n;
-        const low = record.kind === 'article' && isBelowMinimum(record, available);
-        const isVehicle = record.kind === 'article' && record.fields.category === 'vehicles';
+        const stockArticle = isStockArticle(record);
+        const low = isBelowMinimum(record, available);
+        const isVehicle = isVehicleArticle(record);
+        const historicalVehicleMovement = record.kind === 'movement' && record.archived && warehouseVehicles.has(record.fields.article_id);
         const Icon = isVehicle ? Truck : icons[record.kind];
         const profile = isVehicle ? vehicleHref(identity, record.id) : null;
         const period = vehicleMaintenance(record);
@@ -357,10 +366,9 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         const contextActions: ContextAction[] = [{ label: openLabel, icon: Pencil, disabled: busy, onSelect: () => openView(record) }];
         if (profile) contextActions.unshift({ label: 'Scheda veicolo', icon: Truck, href: profile });
         if (siteHref) contextActions.push({ label: 'Apri cantiere', icon: HardHat, href: siteHref });
-        contextActions.push(
-          { label: archiveLabel, icon: ArchiveIcon, disabled: busy, onSelect: () => toggleArchive(record) },
-          { label: 'Elimina', icon: Trash2, tone: 'danger', disabled: busy, onSelect: () => trash.request(record.id, record.title) },
-        );
+        if (!historicalVehicleMovement)
+          contextActions.push({ label: archiveLabel, icon: ArchiveIcon, disabled: busy, onSelect: () => toggleArchive(record) });
+        contextActions.push({ label: 'Elimina', icon: Trash2, tone: 'danger', disabled: busy, onSelect: () => trash.request(record.id, record.title) });
         return <ContextActions key={record.id} label={record.title} actions={contextActions}>
           {({ surface, trigger }) => <li {...surface} className={`${styles.record}${selected ? ` ${styles.selectedRecord}` : ''}`}>
             <div className={styles.recordHead}><span className={styles.recordIcon}><Icon size={19}/></span>
@@ -372,8 +380,9 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
             <h3 ref={selected ? selectedHeading : undefined} tabIndex={selected ? -1 : undefined}>{record.title}</h3>
             {record.record_date && <time dateTime={record.record_date}>{dateLabel(record.record_date)}</time>}
             {definition.summary?.(record, records).filter(Boolean).map((value, index) => <p key={index} className={styles.summary}>{value}</p>)}
-            {record.kind === 'article' && <dl className={styles.stock}>
-              <div><dt>{isVehicle ? 'Giacenza' : 'Disponibilità'}</dt><dd>{formatStockQuantity(available)} {record.fields.unit}</dd></div>
+            {historicalVehicleMovement && <p className={styles.summary}>Movimento storico del veicolo</p>}
+            {stockArticle && <dl className={styles.stock}>
+              <div><dt>Disponibilità</dt><dd>{formatStockQuantity(available)} {record.fields.unit}</dd></div>
               <div><dt>Scorta minima</dt><dd>{formatStockQuantity(stockMinimum(record))} {record.fields.unit}</dd></div>
             </dl>}
             {period && maintenanceState && <div className={`${styles.maintenanceCard} ${styles[maintenanceState]}`}>
@@ -398,14 +407,14 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
                 <Link className="button secondary" href={workerDeadlinesHref(identity, record.id)} aria-label={`Scadenze di ${record.title}`}>
                   <CalendarClock size={15} aria-hidden="true"/> Scadenze
                 </Link>}
-              {record.kind === 'article' && !record.archived && <button type="button" className="button secondary" disabled={busy}
+              {stockArticle && !record.archived && <button type="button" className="button secondary" disabled={busy}
                 onClick={() => openView({ movementFor: record.id })}><Boxes size={15}/> Carico / scarico</button>}
               {isVehicle && record.status === 'active' && !record.archived &&
                 <Link className="button secondary" href={orgLink('/gestione/assegnazioni-veicoli?veicolo=' + record.id, identity)}>
                   <Truck size={15}/> {maintenanceState === 'active' ? 'Assegna per altre date' : 'Assegna'}
                 </Link>}
-              <button className="button text-button" disabled={busy} onClick={() => toggleArchive(record)}>
-                <ArchiveIcon size={15}/>{archiveLabel}</button>
+              {!historicalVehicleMovement && <button className="button text-button" disabled={busy} onClick={() => toggleArchive(record)}>
+                <ArchiveIcon size={15}/>{archiveLabel}</button>}
               <button type="button" className={`button text-button ${styles.deleteAction}`} disabled={busy}
                 aria-label={`Elimina ${record.title}`} onClick={event => trash.request(record.id, record.title, event.currentTarget)}>
                 <Trash2 size={15} aria-hidden="true"/> Elimina</button>
@@ -430,7 +439,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     </section>
     {editor && <OperationEditor key={kind + ':' + (movementFor || editingRecord?.id || 'new')}
       definition={movementFor ? operationDefinition('movement') : definition} record={editingRecord} today={today}
-      identity={identity} sites={availableSites} articles={articles} movementFor={movementFor} fleetView={fleetView && !movementFor}
+      identity={identity} sites={availableSites} articles={editorArticles} movementFor={movementFor} fleetView={fleetView && !movementFor}
       selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}
       onSiteCreated={site => setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)])}/>}
     {trash.feedback}

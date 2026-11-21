@@ -14,6 +14,7 @@ export type Field = {
   placeholder?: string;
   options?: Option[];
   when?: { key: string; value: string };
+  unless?: { key: string; value: string };
 };
 export type OperationRecord = {
   id: string;

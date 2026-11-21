@@ -3,7 +3,7 @@ import { calendarRange } from './calendar.ts';
 import { plusDays, romeDate, type Job, type JobKind, type SiteState } from './domain.ts';
 import type { QuoteSummary } from './estimate-pricing.ts';
 import { documentTotals } from './operation-documents.ts';
-import { getWarehouseAvailability, isBelowMinimum } from './operation-resources.ts';
+import { getWarehouseAvailability, isBelowMinimum, isStockArticle } from './operation-resources.ts';
 import type { OperationRecord, SiteOption } from './operation-types.ts';
 import { isSelectableAssignee, isSelectableVehicle, vehicleAssignmentState, type VehicleAssignment } from './vehicle-assignments.ts';
 import { vehicleMaintenance, vehicleMaintenanceState } from './vehicle-maintenance.ts';
@@ -198,7 +198,7 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   const settledInvoices: ReportInvoice[] = [];
   const currentRecords = [...new Map(data.records.map(record => [record.id, record])).values()].filter(record => !record.archived);
   const scopedRecords = currentRecords.filter(record => inSite(record.site_id));
-  const articles = currentRecords.filter(record => record.kind === 'article');
+  const stockArticles = currentRecords.filter(isStockArticle);
   const stock = getWarehouseAvailability(currentRecords);
   const jobsByKind: Record<JobKind, number> = { survey: 0, assembly: 0, adjustment: 0, dismantling: 0, other: 0 };
   const clients = new Set(sites.map(site => site.client_id || site.client.trim().toLowerCase()).filter(Boolean));
@@ -207,8 +207,8 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   const activity = {
     activeSites: sitesByStatus.active, sites: sites.length, sitesByStatus, clients: clients.size,
     jobs: 0, jobsCompleted: 0, jobsOverdue: 0, jobsByKind, orders: 0, ddt: 0, estimates: 0, quotes: 0,
-    employees: 0, workers: 0, crews: 0, stockArticles: articles.length,
-    lowStock: articles.filter(article => isBelowMinimum(article, stock.get(article.id) ?? 0n)).length,
+    employees: 0, workers: 0, crews: 0, stockArticles: stockArticles.length,
+    lowStock: stockArticles.filter(article => isBelowMinimum(article, stock.get(article.id) ?? 0n)).length,
     vehiclesAssigned: data.assignments === null ? null : 0,
   };
 
@@ -273,11 +273,11 @@ export function buildBusinessReport(data: ReportData, filters: ReportFilters, to
   }
 
   if (data.assignments !== null) {
-    const vehicles = new Set(articles.filter(article => {
-      if (!isSelectableVehicle(article)) return false;
-      const maintenance = vehicleMaintenance(article);
+    const vehicles = new Set(currentRecords.filter(record => {
+      if (!isSelectableVehicle(record)) return false;
+      const maintenance = vehicleMaintenance(record);
       return !maintenance || vehicleMaintenanceState(maintenance, today) !== 'active';
-    }).map(article => article.id));
+    }).map(record => record.id));
     const assignees = new Set(scopedRecords.filter(isSelectableAssignee).map(record => record.id));
     const siteIds = new Set(sites.map(site => site.id));
     const assigned = new Set<string>();

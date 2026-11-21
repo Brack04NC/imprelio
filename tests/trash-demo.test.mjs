@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { demoKey, getDemo, getDemoBacking, updateDemo } from '../lib/demo.ts';
-import { localOperations, operationSamples, updateLocalOperation } from '../lib/operations-demo.ts';
+import { localOperations, operationsKey, operationSamples, updateLocalOperation } from '../lib/operations-demo.ts';
+import { getWarehouseAvailability, isBelowMinimum } from '../lib/operation-resources.ts';
+import { validateOperation } from '../lib/operations.ts';
 import { demoTrashedInterventionsKey, readDemoTrash, writeDemoTrash } from '../lib/trash-demo.ts';
 import { localDeadlineWorker, localWorkerDeadlines, workerDeadlineDemoSamples } from '../lib/worker-deadlines-demo.ts';
 
@@ -74,6 +76,34 @@ test('Il cestino demo protegge la giacenza e mantiene lo stato archiviato delle 
   await trash('worker_deadline', deadline.id, 'restore');
   assert.equal(localOperations(today, 'personale').find(record => record.id === worker.id).archived, true);
   assert.equal(localWorkerDeadlines(today, worker.id).some(entry => entry.id === deadline.id), true);
+});
+
+test('I mezzi della demo conservano lo storico senza partecipare alle giacenze', async t => {
+  browserStorage(t);
+  const seed = operationSamples(today);
+  const [article, vehicle, receipt] = seed;
+  const legacy = { ...vehicle, fields: { ...vehicle.fields, unit: 'pz', stock_min: '2' } };
+  const movement = { ...receipt, id: crypto.randomUUID(), fields: { ...receipt.fields, article_id: vehicle.id, quantity: '3' } };
+  localStorage.setItem(operationsKey, JSON.stringify([...seed.map(row => row.id === vehicle.id ? legacy : row), movement]));
+
+  const records = localOperations(today, 'magazzino');
+  assert.deepEqual(records.find(row => row.id === vehicle.id).fields, vehicle.fields);
+  assert.deepEqual(records.find(row => row.id === movement.id), { ...movement, archived: true });
+  assert.equal(getWarehouseAvailability([...seed, movement]).has(vehicle.id), false);
+  assert.equal(getWarehouseAvailability(records).get(article.id), 84_000n);
+  assert.equal(isBelowMinimum(legacy, 0n), false);
+  const vehicleWrite = validateOperation({ ...legacy, action: 'save' });
+  assert.equal('unit' in vehicleWrite.fields || 'stock_min' in vehicleWrite.fields, false);
+  assert.equal(validateOperation({ ...article, action: 'save' }).fields.unit, 'pz');
+
+  assert.throws(() => updateLocalOperation(today, { ...movement, id: crypto.randomUUID(), action: 'save' }), /usa le assegnazioni/);
+  assert.throws(() => updateLocalOperation(today, { id: movement.id, kind: 'movement', action: 'restore' }), /usa le assegnazioni/);
+  assert.throws(() => updateLocalOperation(today, { ...article, fields: { category: 'vehicles' }, action: 'save' }), /movimenti attivi/);
+  await trash('operation', vehicle.id);
+  await trash('operation', movement.id);
+  await trash('operation', movement.id, 'restore');
+  await trash('operation', vehicle.id, 'restore');
+  assert.equal(localOperations(today, 'magazzino').find(row => row.id === movement.id).archived, true);
 });
 
 test('Gli interventi eliminati prima dell’aggiornamento sono ripristinabili dal cestino demo', async t => {

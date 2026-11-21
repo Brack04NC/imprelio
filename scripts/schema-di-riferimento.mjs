@@ -8,7 +8,7 @@ export async function referenceMigrations() {
   return (await readdir(migrations)).filter(name => /^[0-9]+_.+\.sql$/.test(name)).sort();
 }
 
-export async function openReferenceSchema() {
+export async function openReferenceSchema(through) {
   const db = new PGlite({ extensions: { btree_gist } });
   try {
     await db.exec(`
@@ -30,7 +30,7 @@ export async function openReferenceSchema() {
       alter table storage.objects enable row level security;
       grant usage on schema storage to anon, authenticated;
     `);
-    const names = await referenceMigrations();
+    const names = (await referenceMigrations()).filter(name => !through || name.split('_', 1)[0] <= through);
     for (const name of names) await db.exec(await readFile(new URL(name, migrations), 'utf8'));
     return db;
   } catch (error) {

@@ -1,5 +1,5 @@
 import { plusDays, type AgendaItem, type Client } from './domain.ts';
-import { formatStockQuantity, getWarehouseAvailability, getTeamType, isBelowMinimum, stockMinimum } from './operation-resources.ts';
+import { formatStockQuantity, getWarehouseAvailability, getTeamType, isBelowMinimum, isVehicleArticle, stockMinimum } from './operation-resources.ts';
 import type { OperationRecord, SiteOption } from './operation-types.ts';
 import { vehicleMaintenance, vehicleMaintenanceState } from './vehicle-maintenance.ts';
 
@@ -32,15 +32,18 @@ export function dashboardRecords(records: OperationRecord[], today: string): Das
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at) || a.title.localeCompare(b.title, 'it') || a.id.localeCompare(b.id))
     .map(record => {
       const { id, kind, title, status, record_date, site_id, fields } = record;
-      const vehicle = kind === 'article' && fields.category === 'vehicles';
+      const vehicle = isVehicleArticle(record);
       const base = { id, kind, title, status, record_date, site_id, vehicle };
       switch (kind) {
         case 'article': {
+          const detail = [fields.plate || fields.serial_number || fields.code, fields.location].filter(Boolean).join(' · ');
+          if (vehicle) {
+            const maintenance = vehicleMaintenance(record);
+            return { ...base, detail, status: maintenance && vehicleMaintenanceState(maintenance, today) === 'active' ? 'inactive' : status };
+          }
           const quantity = balances.get(id) ?? 0n;
-          const maintenance = vehicleMaintenance(record);
           return {
-            ...base, status: maintenance && vehicleMaintenanceState(maintenance, today) === 'active' ? 'inactive' : status,
-            detail: [fields.plate || fields.serial_number || fields.code, fields.location].filter(Boolean).join(' · '),
+            ...base, detail,
             availability: { quantity: formatStockQuantity(quantity), minimum: formatStockQuantity(stockMinimum(record)),
               unit: fields.unit ?? '', low: isBelowMinimum(record, quantity) },
           };

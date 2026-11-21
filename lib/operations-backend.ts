@@ -1,5 +1,6 @@
 import 'server-only';
 import type { database } from './backend';
+import { vehicleStockConversionError, vehicleStockMovementError } from './operation-resources';
 import { areas, type OperationArea, type OperationRecord, type OperationWrite, type SiteOption } from './operation-types';
 import { maintenanceScheduleError, vehicleMaintenance } from './vehicle-maintenance';
 
@@ -45,6 +46,8 @@ export async function writeOperation(db: Database, organization: string, action:
   if (!error) return;
   if (error.code === '23P01' && error.message.includes('manutenzione')) throw new Error(maintenanceScheduleError);
   if (error.code === 'P0001') {
+    if (error.message === 'I veicoli non hanno movimenti di magazzino') throw new Error(vehicleStockMovementError);
+    if (error.message === 'Conversione in veicolo con movimenti attivi') throw new Error(vehicleStockConversionError);
     if (error.message.includes('Stock insufficiente')) throw new Error('La modifica porterebbe la giacenza sotto zero.');
     if (error.message.includes('Articolo con movimenti attivi')) throw new Error('Archivia prima i movimenti di questo articolo.');
   }

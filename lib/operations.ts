@@ -24,7 +24,8 @@ const rawWrite = z.object({
 });
 
 export function applicableFields(fields: Field[], values: Values) {
-  return fields.filter(field => !field.when || values[field.when.key] === field.when.value);
+  return fields.filter(({ when, unless }) => (!when || values[when.key] === when.value)
+    && (!unless || values[unless.key] !== unless.value));
 }
 
 function cleanValues(fields: Field[], values: Values = {}): Values {

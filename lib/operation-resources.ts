@@ -4,6 +4,19 @@ const THOUSAND = 1000n;
 const stockLimit = 999_999_999.999;
 const wholeQuantity = new Intl.NumberFormat('it-IT');
 
+type ArticleCategory = Pick<OperationRecord, 'kind' | 'fields'>;
+
+export function isVehicleArticle(record: ArticleCategory): boolean {
+  return record.kind === 'article' && record.fields.category === 'vehicles';
+}
+
+export function isStockArticle(record: ArticleCategory): boolean {
+  return record.kind === 'article' && !isVehicleArticle(record);
+}
+
+export const vehicleStockMovementError = 'Per i veicoli usa le assegnazioni e il registro di utilizzo.';
+export const vehicleStockConversionError = 'Archivia o elimina i movimenti attivi prima di convertire l’articolo in veicolo.';
+
 export function parseStockQuantity(input: string): bigint | null {
   const match = /^(\d{1,9})(?:[.,](\d{1,3}))?$/.exec(input.trim());
   if (!match) return null;
@@ -19,11 +32,12 @@ export function formatStockQuantity(value: bigint): string {
 }
 
 export function getWarehouseAvailability(records: readonly OperationRecord[]): Map<string, bigint> {
+  const vehicles = new Set(records.filter(isVehicleArticle).map(record => record.id));
   const balances = new Map<string, bigint>();
   for (const record of records) {
     if (record.kind !== 'movement' || record.archived) continue;
     const { article_id, direction, quantity } = record.fields;
-    if (!article_id || !quantity || (direction !== 'in' && direction !== 'out')) continue;
+    if (!article_id || vehicles.has(article_id) || !quantity || (direction !== 'in' && direction !== 'out')) continue;
     const amount = parseStockQuantity(quantity);
     if (amount === null) continue;
     const delta = direction === 'in' ? amount : -amount;
@@ -37,7 +51,7 @@ export function stockMinimum(article: OperationRecord): bigint {
 }
 
 export function isBelowMinimum(article: OperationRecord, available: bigint): boolean {
-  return !article.archived && available < stockMinimum(article);
+  return isStockArticle(article) && !article.archived && available < stockMinimum(article);
 }
 
 const materialCategories: Option[] = [
@@ -100,8 +114,10 @@ export const resourceDefinitions: Definition[] = [
     fields: [
       { key: 'code', label: 'Codice articolo', placeholder: 'Es. PNT-100' },
       { key: 'category', label: 'Categoria', type: 'select', options: materialCategories, initial: 'materials', required: true },
-      { key: 'unit', label: 'Unità di misura', type: 'select', options: stockUnits, initial: 'pz', required: true },
-      { key: 'stock_min', label: 'Scorta minima', type: 'number', decimals: 3, min: 0, max: stockLimit, initial: '0' },
+      { key: 'unit', label: 'Unità di misura', type: 'select', options: stockUnits, initial: 'pz', required: true,
+        unless: { key: 'category', value: 'vehicles' } },
+      { key: 'stock_min', label: 'Scorta minima', type: 'number', decimals: 3, min: 0, max: stockLimit, initial: '0',
+        unless: { key: 'category', value: 'vehicles' } },
       { key: 'location', label: 'Posizione in magazzino', placeholder: 'Es. Scaffale B2' },
       ...vehicleFields.map(field => ({ ...field, when: { key: 'category', value: 'vehicles' } })),
       { key: 'notes', label: 'Note', type: 'textarea' },

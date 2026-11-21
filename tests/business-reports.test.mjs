@@ -93,7 +93,8 @@ test('Filtra attività e fatture per cantiere mantenendo le scorte aziendali', (
     record('Impianto', 'article', { site_id: null, fields: { stock_min: '4' } }),
     record('Carico', 'movement', { site_id: siteB, record_date: '2025-06-01',
       fields: { article_id: 'Impianto', direction: 'in', quantity: '3,5' } }),
-    record('Mezzo A', 'article', { site_id: null, fields: { category: 'vehicles' } }),
+    record('Mezzo A', 'article', { site_id: null, fields: { category: 'vehicles', unit: 'pz', stock_min: '5' } }),
+    record('Vecchio carico mezzo', 'movement', { fields: { article_id: 'Mezzo A', direction: 'in', quantity: '1' } }),
     record('Mezzo B', 'article', { site_id: null, fields: { category: 'vehicles' } }),
     record('Ordine', 'order', { record_date: period.from }),
     record('DDT 1', 'ddt', { record_date: period.from }),
@@ -120,7 +121,7 @@ test('Filtra attività e fatture per cantiere mantenendo le scorte aziendali', (
     activeSites: 1, sites: 1, sitesByStatus: { active: 1, planned: 0, paused: 0, closed: 0 }, clients: 1,
     jobs: 3, jobsCompleted: 1, jobsOverdue: 1, jobsByKind: { survey: 1, assembly: 2, adjustment: 0, dismantling: 0, other: 0 },
     orders: 1, ddt: 1, estimates: 1, quotes: 1, employees: 1, workers: 0, crews: 1,
-    stockArticles: 3, lowStock: 1, vehiclesAssigned: 1,
+    stockArticles: 1, lowStock: 1, vehiclesAssigned: 1,
   });
   assert.equal(report.sites[0].jobCount, 3);
   assert.equal(report.summary.revenue, 1000n);

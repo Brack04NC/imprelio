@@ -1,5 +1,5 @@
 import { demoSeed, getDemo } from './demo.ts';
-import { getWarehouseAvailability } from './operation-resources.ts';
+import { getWarehouseAvailability, isVehicleArticle, vehicleStockConversionError, vehicleStockMovementError } from './operation-resources.ts';
 import { areas, operationKinds, type OperationArea, type OperationKind, type OperationRecord, type OperationWrite, type SiteOption } from './operation-types.ts';
 import { plusDays } from './domain.ts';
 import { demoTombstoneIds } from './trash-storage.ts';
@@ -15,10 +15,9 @@ export function operationSamples(today: string): OperationRecord[] {
   });
   return [
     sample(1, 'article', 'Telaio ponteggio 105', 'active', null, { code: 'MAT-001', category: 'materials', unit: 'pz', stock_min: '20', location: 'Deposito A' }, [], null),
-    sample(2, 'article', 'Autocarro con gru', 'active', null, { code: 'VEI-002', category: 'vehicles', unit: 'pz', stock_min: '1', location: 'Piazzale', revision_due_on: plusDays(today, 12) }, [], null),
+    sample(2, 'article', 'Autocarro con gru', 'active', null, { code: 'VEI-002', category: 'vehicles', location: 'Piazzale', revision_due_on: plusDays(today, 12) }, [], null),
     sample(3, 'movement', 'Carico iniziale telai', 'recorded', null, { article_id: id(1), direction: 'in', quantity: '120' }, [], plusDays(today, -2)),
     sample(4, 'movement', 'Telai per facciata nord', 'recorded', site, { article_id: id(1), direction: 'out', quantity: '36' }),
-    sample(5, 'movement', 'Registrazione autocarro', 'recorded', null, { article_id: id(2), direction: 'in', quantity: '1' }),
     sample(6, 'employee', 'Sara Colombo', 'active', another, { code: 'DIP-002', role: 'Coordinatrice' }, [], null),
     sample(7, 'worker', 'Luca Ferretti', 'active', site, { code: 'OPE-004', qualification: 'Montaggio ponteggi' }, [], null),
     sample(8, 'crew', 'Squadra posa Nord', 'engaged', site, { company: 'Edilnova S.r.l.', specialty: 'Montaggio', headcount: '4' }, [], null),
@@ -51,11 +50,26 @@ function isTextObject(value: unknown) {
     && Object.values(value).every(member => typeof member === 'string');
 }
 
+function withoutVehicleStock(record: OperationRecord): OperationRecord {
+  if (!isVehicleArticle(record) || (!Object.hasOwn(record.fields, 'unit') && !Object.hasOwn(record.fields, 'stock_min'))) return record;
+  const { unit, stock_min, ...fields } = record.fields;
+  return { ...record, fields };
+}
+
+function normalizeVehicleRecords(records: OperationRecord[]): OperationRecord[] {
+  const vehicles = new Set(records.filter(isVehicleArticle).map(record => record.id));
+  return records.map(record => {
+    if (record.kind === 'movement' && !record.archived && vehicles.has(record.fields.article_id))
+      return { ...record, archived: true };
+    return withoutVehicleStock(record);
+  });
+}
+
 export function demoOperationsBacking(today: string) {
   try {
     const stored = localStorage.getItem(operationsKey);
     const data: unknown = stored ? JSON.parse(stored) : null;
-    if (Array.isArray(data) && data.every(isRecord)) return data;
+    if (Array.isArray(data) && data.every(isRecord)) return normalizeVehicleRecords(data);
   } catch { /* Use examples when stored data are unavailable. */ }
   return operationSamples(today);
 }
@@ -92,22 +106,26 @@ export function updateLocalOperation(today: string, action: OperationWrite) {
     const { action: _, ...rest } = action;
     if (rest.site_id && !demoSiteOptions(today, true).some(site => site.id === rest.site_id))
       throw new Error('Il cantiere selezionato non è più disponibile.');
-    value = { ...rest, archived: false, updated_at };
+    value = withoutVehicleStock({ ...rest, archived: false, updated_at });
   } else {
     value = { ...old!, archived: action.action === 'archive', updated_at };
   }
 
   const next = [value, ...records.filter(record => record.id !== value.id)];
   const visible = next.filter(record => !deleted.has(record.id));
-  if (value.kind === 'article' && value.archived && visible.some(record =>
-    record.kind === 'movement' && !record.archived && record.fields.article_id === value.id))
-    throw new Error('Archivia prima i movimenti di questo articolo.');
+  const linkedMovements = value.kind === 'article' && visible.some(record =>
+    record.kind === 'movement' && !record.archived && record.fields.article_id === value.id);
+  if (linkedMovements && value.archived) throw new Error('Archivia prima i movimenti di questo articolo.');
+  if (linkedMovements && isVehicleArticle(value)) throw new Error(vehicleStockConversionError);
   if (value.kind === 'movement') {
-    if (!value.archived && !visible.some(record => record.kind === 'article' && !record.archived && record.id === value.fields.article_id))
-      throw new Error('L’articolo selezionato non è più disponibile.');
+    if (!value.archived) {
+      const article = visible.find(record => record.kind === 'article' && !record.archived && record.id === value.fields.article_id);
+      if (!article) throw new Error('L’articolo selezionato non è più disponibile.');
+      if (isVehicleArticle(article)) throw new Error(vehicleStockMovementError);
+    }
     if ([...getWarehouseAvailability(visible).values()].some(balance => balance < 0n))
       throw new Error('La modifica porterebbe la giacenza sotto zero.');
   }
-  localStorage.setItem(operationsKey, JSON.stringify(next));
+  localStorage.setItem(operationsKey, JSON.stringify(isVehicleArticle(value) ? normalizeVehicleRecords(next) : next));
   return value;
 }

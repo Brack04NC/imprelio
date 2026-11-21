@@ -263,7 +263,7 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
         if (!creating.plate.trim() && !creating.serial_number.trim()) throw new Error('Inserisci la targa o la matricola del veicolo.');
         const record = validateOperation({ action: 'save', id: creating.id, kind: 'article', title: creating.name,
           status: 'active', site_id: null, record_date: null,
-          fields: { category: 'vehicles', unit: 'pz', plate: creating.plate, serial_number: creating.serial_number } });
+          fields: { category: 'vehicles', plate: creating.plate, serial_number: creating.serial_number } });
         if (record.action !== 'save') throw new Error('Il veicolo non è valido.');
         if (identity.demo) updateLocalOperation(today, record);
         else await submitJson('/api/operativita', identity.org.id, record);
