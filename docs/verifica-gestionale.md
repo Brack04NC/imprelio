@@ -23,7 +23,7 @@ La revisione grafica ha confrontato navigazione, gerarchia dei titoli, azioni pr
 - Nel magazzino il filtro delle schede archiviate si trasferiva da Movimenti ad Articoli, nascondendo giacenze attive. Il cambio di sezione ora riapre le schede attive.
 - Dopo una modifica in Agenda, la demo poteva mostrare nuovamente gli interventi di un cantiere nel cestino. La vista aggiornata riapplica il filtro anche prima del ricaricamento.
 - Un nuovo invitato poteva uscire senza disporre di una password per il secondo accesso. Il percorso di invito ora include la scelta e conferma della password.
-- L’Archivio documenti controlla la disponibilità del database prima di avviare l’importazione o l’OCR. Il cestino gestisce anche i documenti caricati nell’archivio.
+- L’Archivio documenti controlla la disponibilità del database prima di avviare l’importazione o l’OCR. Il cestino gestisce anche i documenti caricati nell’archivio. Cestinando un cantiere, l’archivio unificato nasconde sia i nuovi upload sia i PDF provenienti dai computi. Il ripristino rende nuovamente disponibili gli originali.
 - Aprendo la dashboard a 1440 px il menu avviava richieste per altre otto sezioni. Allo stesso viewport e senza interazioni, la build corretta ne avvia zero. Il gestionale dichiara inoltre la preferenza per l’esclusione dall’indicizzazione.
 
 ## Stato del database online

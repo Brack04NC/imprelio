@@ -22,7 +22,7 @@ const estimateOriginals = 'estimate-source-pdfs';
 const names = { intake: originals, 'estimate-pdf': estimateOriginals };
 const extensions = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const;
 const intakeFields = 'id,kind,file_name,mime_type,size_bytes,site_id,created_at,uploaded_at,extraction';
-const estimateFields = 'id,file_name,size_bytes,site_id,created_at,uploaded_at,document_extraction';
+const estimateFields = 'id,file_name,size_bytes,site_id,created_at,uploaded_at,document_extraction,sites!inner(id)';
 const pageSize = 250;
 const signatureBytes = 1024;
 const signedReadSeconds = 300;
@@ -203,7 +203,7 @@ export async function attachEstimateDocument(db: Database, org: string, id: stri
 
 export async function openDocument(db: Database, org: string, id: string, source: Source) {
   const table = source === 'intake' ? 'document_imports' : 'estimate_pdf_files';
-  const columns = source === 'intake' ? 'id,mime_type' : 'id';
+  const columns = source === 'intake' ? 'id,mime_type' : 'id,sites!inner(id)';
   const { data, error } = await db.from(table).select(columns).eq('organization_id', org).eq('id', id)
     .not('uploaded_at', 'is', null).maybeSingle().overrideTypes<{ id: string; mime_type?: Reservation['mime_type'] }, { merge: false }>();
   if (error) throw error;
