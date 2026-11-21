@@ -18,6 +18,8 @@ export async function signIn(form: FormData) {
   const db = await database();
   const { error } = await db.auth.signInWithPassword(result.data);
   if (error) redirect('/login?errore=credenziali');
+  const { error: activationError } = await db.rpc('claim_imprelio_invitations');
+  if (activationError) redirect('/login?errore=attivazione');
   redirect('/');
 }
 

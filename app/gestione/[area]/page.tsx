@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ area: str
 }
 
 export default async function OperationalArea({ params, searchParams }: {
-  params: Promise<{ area: string }>; searchParams: Promise<{ azienda?: string; cantiere?: string; tipo?: string; veicolo?: string; scheda?: string }>;
+  params: Promise<{ area: string }>; searchParams: Promise<{ azienda?: string; cantiere?: string; tipo?: string; veicolo?: string; scheda?: string; modifica?: string }>;
 }) {
   const [{ area }, query] = await Promise.all([params, searchParams]);
   if (!isArea(area)) notFound();
@@ -37,9 +37,10 @@ export default async function OperationalArea({ params, searchParams }: {
   </Shell>;
   const sites = db ? await operationSites(db, identity.org.id) : demoSiteOptions(today);
   const vehicle = area === 'magazzino' && typeof query.veicolo === 'string' ? query.veicolo : undefined;
+  const editVehicle = Boolean(vehicle && query.modifica === '1');
   const parsedRecord = z.uuid().safeParse(query.scheda);
   const record = parsedRecord.success ? parsedRecord.data.toLowerCase() : undefined;
-  return <OperationPage key={JSON.stringify([identity.org.id, area, query.cantiere, query.tipo, vehicle, record])} identity={identity}
+  return <OperationPage key={JSON.stringify([identity.org.id, area, query.cantiere, query.tipo, vehicle, record, editVehicle])} identity={identity}
     area={area} today={today} initial={result} sites={sites} requestedSite={query.cantiere} requestedKind={query.tipo}
-    requestedVehicle={vehicle} requestedRecord={record}/>;
+    requestedVehicle={vehicle} requestedRecord={record} editVehicle={editVehicle}/>;
 }

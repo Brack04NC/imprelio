@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, LayoutDashboard, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
+import { Archive, Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, LayoutDashboard, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
@@ -16,6 +16,7 @@ const modules = [
   { section: 'personale', label: areas.personale.title, href: '/gestione/personale', icon: Users },
   { section: 'presenze', label: 'Presenze', href: '/gestione/presenze', icon: CalendarCheck },
   { section: 'amministrazione', label: areas.amministrazione.title, href: '/gestione/amministrazione', icon: FileText },
+  { section: 'archivio-documenti', label: 'Archivio documenti', href: '/gestione/archivio-documenti', icon: Archive },
   { section: 'computi-metrici', label: areas['computi-metrici'].title, href: '/gestione/computi-metrici', icon: Calculator },
   { section: 'preventivi-computo', label: 'Preventivi da PDF', href: '/gestione/preventivi-computo', icon: FileUp },
   { section: 'statistiche', label: 'Statistiche', href: '/gestione/statistiche', icon: ChartNoAxesCombined },
@@ -85,14 +86,14 @@ export function Shell({ identity, section, detail, onSearch, children }: {
         <p className="nav-label">OPERATIVITÀ</p>
         <Link href={home} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'dashboard' ? 'page' : undefined}
           className={'nav-link ' + (section === 'dashboard' ? 'nav-active' : '')}><LayoutDashboard size={19} aria-hidden="true"/> Dashboard</Link>
-        <Link href={overview} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
-        <Link href={agenda} onClick={() => mobile.current?.close()} aria-current={section === 'agenda' ? 'page' : undefined}
+        <Link href={overview} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
+        <Link href={agenda} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'agenda' ? 'page' : undefined}
           className={'nav-link ' + (section === 'agenda' ? 'nav-active' : '')}><CalendarDays size={18} /> Agenda</Link>
         <Link href={notifications} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'notifiche' ? 'page' : undefined}
           className={'nav-link ' + (section === 'notifiche' ? 'nav-active' : '')}><Bell size={18} aria-hidden="true"/> Notifiche</Link>
-        {identity.org.role === 'admin' && <Link href={access} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
+        {identity.org.role === 'admin' && <Link href={access} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
         <p className="nav-label roadmap-label">GESTIONE</p>
-        {modules.map(({ section: page, label, href, icon: Icon }) => <Link key={page} href={orgLink(href, identity)}
+        {modules.map(({ section: page, label, href, icon: Icon }) => <Link key={page} href={orgLink(href, identity)} prefetch={false}
           onClick={() => mobile.current?.close()} aria-current={section === page ? 'page' : undefined}
           className={'nav-link ' + (section === page ? 'nav-active' : '')}><Icon size={18}/> {label}</Link>)}
       </nav>
@@ -119,11 +120,11 @@ export function Shell({ identity, section, detail, onSearch, children }: {
           <button className="icon-button menu-trigger" onClick={() => mobile.current?.showModal()} aria-haspopup="dialog" aria-label="Apri menu"><Menu size={21}/></button>
           <PanelTop size={16} className="breadcrumb-icon" aria-hidden="true"/>
           <span className="breadcrumb-root">Area di lavoro</span><ChevronRight size={14} className="breadcrumb-root" />
-          {detail && section === 'cantieri' ? <Link href={overview}>Cantieri</Link> : <strong>{sectionLabel}</strong>}
+          {detail && section === 'cantieri' ? <Link href={overview} prefetch={false}>Cantieri</Link> : <strong>{sectionLabel}</strong>}
           {detail && <><ChevronRight size={14}/><strong className="breadcrumb-detail">{detail}</strong></>}
         </div>
         <div className="top-actions">
-          <Link ref={searchLink} className="global-search" aria-keyshortcuts="Control+K Meta+K" href={orgLink('/cantieri?cerca=1', identity)} onClick={event => {
+          <Link ref={searchLink} prefetch={false} className="global-search" aria-keyshortcuts="Control+K Meta+K" href={orgLink('/cantieri?cerca=1', identity)} onClick={event => {
             if (onSearch && !event.metaKey && !event.ctrlKey && !event.shiftKey) { event.preventDefault(); onSearch(); }
           }}><Search size={17} aria-hidden="true"/><span className="search-caption">Cerca cantieri</span><kbd aria-hidden="true">{shortcutLabel}</kbd></Link>
           <NotificationBell key={identity.org.id} identity={identity}/>
@@ -140,7 +141,7 @@ export function Shell({ identity, section, detail, onSearch, children }: {
               <strong>{identity.name}</strong>
               <small>{identity.demo ? 'Profilo dimostrativo' : identity.email}</small>
               {identity.orgs.length > 1 && identity.orgs.map(org => <Link key={org.id} prefetch={false} href={'/?azienda=' + org.id}><ArrowUpRight size={16}/> {org.name}</Link>)}
-              {identity.org.role === 'admin' && <Link href={access}><ShieldCheck size={16} /> Gestione accessi</Link>}
+              {identity.org.role === 'admin' && <Link href={access} prefetch={false}><ShieldCheck size={16} /> Gestione accessi</Link>}
               {!identity.demo && <form action={signOut}><button><LogOut size={16} /> Esci</button></form>}
             </div>
           </details>

@@ -34,6 +34,12 @@ export type NotificationSources = {
 export const notificationAgendaDays = 7;
 export const notificationDeadlineDays = workerDeadlineNoticeDays;
 export const notificationReadyDays = 30;
+export const vehicleNotificationDeadlines = [
+  { field: 'insurance_due_on', label: 'Assicurazione', id: 'vehicle-insurance' },
+  { field: 'road_tax_due_on', label: 'Bollo', id: 'vehicle-road-tax' },
+  { field: 'revision_due_on', label: 'Revisione', id: 'vehicle-review' },
+  { field: 'service_due_on', label: 'Tagliando', id: 'vehicle-service' },
+] as const;
 
 const priorities: Record<NotificationPriority, number> = { urgent: 0, soon: 1, info: 2 };
 const dateSchema = z.iso.date();
@@ -82,11 +88,12 @@ export function buildNotifications(sources: NotificationSources, today: string, 
   for (const record of sources.operations) {
     if (record.archived && !past) continue;
     if (record.kind === 'article' && record.fields.category === 'vehicles') {
-      const date = record.fields.revision_due_on;
-      if (isDate(date) && (past ? record.archived && date <= today : date <= deadlineUntil)) {
+      for (const { field, label, id } of vehicleNotificationDeadlines) {
+        const date = record.fields[field];
+        if (!isDate(date) || (past ? !record.archived || date > today : date > deadlineUntil)) continue;
         entries.push({
-          id: `vehicle-review:${record.id}`, category: 'vehicles', priority: past ? 'info' : urgency(date), date,
-          title: `Revisione · ${record.title}`, detail: record.fields.code || 'Veicolo',
+          id: `${id}:${record.id}`, category: 'vehicles', priority: past ? 'info' : urgency(date), date,
+          title: `${label} · ${record.title}`, detail: record.fields.code || 'Veicolo',
           status: past ? 'Veicolo archiviato' : date < today ? 'Scaduta' : date === today ? 'Scade oggi' : 'In scadenza',
           href: path('/gestione/magazzino', { veicolo: record.id }), actionLabel: 'Apri veicolo',
         });

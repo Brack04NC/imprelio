@@ -28,17 +28,22 @@ const pageSize = 12;
 
 type Filter = typeof statusFilters[number]['value'];
 type PeriodDraft = VehiclePeriod & { key: string };
+type VehicleDraft = { id: string; name: string; plate: string; serial_number: string };
 type AssignmentDraft = {
   id: string; vehicle_id: string; destination: string; periods: PeriodDraft[];
-  createVehicle: boolean; vehicleDraft: { id: string; name: string; code: string } | null;
+  createVehicle: boolean; vehicleDraft: VehicleDraft | null;
 };
+
+function createVehicleDraft(): VehicleDraft {
+  return { id: crypto.randomUUID(), name: '', plate: '', serial_number: '' };
+}
 
 function createPeriod(start = '', end = ''): PeriodDraft {
   return { key: crypto.randomUUID(), start_date: start, end_date: end };
 }
 
 function describeVehicle(subject: VehicleSubject) {
-  return [subject.title, subject.fields.code].filter(Boolean).join(' · ');
+  return [subject.title, subject.fields.plate || subject.fields.serial_number || subject.fields.code].filter(Boolean).join(' · ');
 }
 
 function describeSite(site: SiteOption) {
@@ -161,7 +166,8 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
     const vehicle = subjectMap.get(assignment.vehicle_id);
     const assignee = assignment.assignee_id ? subjectMap.get(assignment.assignee_id) : undefined;
     const site = assignment.site_id ? siteMap.get(assignment.site_id) : undefined;
-    const description = [vehicle?.title, vehicle?.fields.code, assignee?.title, assignee?.fields.company, site && describeSite(site)].join(' ');
+    const description = [vehicle?.title, vehicle?.fields.plate, vehicle?.fields.serial_number, vehicle?.fields.code,
+      assignee?.title, assignee?.fields.company, site && describeSite(site)].join(' ');
     return description.toLocaleLowerCase('it').includes(needle);
   }).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const pages = Math.max(1, Math.ceil(visible.length / pageSize));
@@ -208,8 +214,13 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
 
   function toggleVehicleCreation() {
     setDraft(current => current && { ...current, createVehicle: !current.createVehicle,
-      vehicleDraft: current.vehicleDraft ?? { id: crypto.randomUUID(), name: '', code: '' } });
+      vehicleDraft: current.vehicleDraft ?? createVehicleDraft() });
     setError(null);
+  }
+
+  function editVehicleDraft(field: Exclude<keyof VehicleDraft, 'id'>, value: string) {
+    setDraft(current => current && { ...current,
+      vehicleDraft: { ...(current.vehicleDraft ?? createVehicleDraft()), [field]: value } });
   }
 
   async function persist(action: VehicleAssignmentAction) {
@@ -249,9 +260,10 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
       const fresh = identity.demo ? localVehicleAssignments(today) : assignments;
       if (hasVehicleConflict(action, fresh)) throw new Error('Il veicolo è già assegnato per almeno una delle date selezionate.');
       if (creating) {
-        if (!creating.code.trim()) throw new Error('Inserisci la targa o il codice del veicolo.');
+        if (!creating.plate.trim() && !creating.serial_number.trim()) throw new Error('Inserisci la targa o la matricola del veicolo.');
         const record = validateOperation({ action: 'save', id: creating.id, kind: 'article', title: creating.name,
-          status: 'active', site_id: null, record_date: null, fields: { category: 'vehicles', unit: 'pz', code: creating.code } });
+          status: 'active', site_id: null, record_date: null,
+          fields: { category: 'vehicles', unit: 'pz', plate: creating.plate, serial_number: creating.serial_number } });
         if (record.action !== 'save') throw new Error('Il veicolo non è valido.');
         if (identity.demo) updateLocalOperation(today, record);
         else await submitJson('/api/operativita', identity.org.id, record);
@@ -354,10 +366,12 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
             {missingSubject && <p className={styles.hint}>Il veicolo o la destinazione precedente non è più disponibile. Seleziona una voce disponibile.</p>}
             {draft.createVehicle ? <div className={styles.newVehicle}>
               <label>Nome del veicolo<input autoFocus required maxLength={160} value={draft.vehicleDraft?.name ?? ''} placeholder="Es. Furgone cassonato"
-                onChange={event => setDraft({ ...draft, vehicleDraft: { id: draft.vehicleDraft?.id ?? crypto.randomUUID(), code: draft.vehicleDraft?.code ?? '', name: event.target.value } })}/></label>
-              <label>Targa o codice<input required maxLength={40} value={draft.vehicleDraft?.code ?? ''} placeholder="Es. AB123CD"
-                onChange={event => setDraft({ ...draft, vehicleDraft: { id: draft.vehicleDraft?.id ?? crypto.randomUUID(), name: draft.vehicleDraft?.name ?? '', code: event.target.value } })}/></label>
-              <p className={styles.hint}>Al salvataggio il veicolo verrà aggiunto al magazzino.</p>
+                onChange={event => editVehicleDraft('name', event.target.value)}/></label>
+              <label>Targa<input maxLength={40} value={draft.vehicleDraft?.plate ?? ''} placeholder="Es. AB123CD"
+                onChange={event => editVehicleDraft('plate', event.target.value)}/></label>
+              <label>Matricola<input maxLength={40} value={draft.vehicleDraft?.serial_number ?? ''}
+                onChange={event => editVehicleDraft('serial_number', event.target.value)}/></label>
+              <p className={styles.hint}>Indica almeno la targa o la matricola. Al salvataggio il veicolo verrà aggiunto al magazzino.</p>
             </div> : <label>Veicolo dal magazzino<select autoFocus required value={draft.vehicle_id} onChange={event => setDraft({ ...draft, vehicle_id: event.target.value })}>
               <option value="">Seleziona un veicolo</option>
               {vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{describeVehicle(vehicle)}</option>)}

@@ -108,7 +108,7 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
       if (isDemoTrashed('intervention', action.id)) throw new Error('L’intervento è nel cestino. Ripristinalo prima di modificarlo.');
       const next = updateDemo(getDemoBacking(today), action);
       localStorage.setItem(demoKey, JSON.stringify(next));
-      setDemo(next);
+      setDemo(getDemo(today));
     } else {
       await requestWorkspace(new URLSearchParams({ azienda: identity.org.id }), undefined, action);
     }

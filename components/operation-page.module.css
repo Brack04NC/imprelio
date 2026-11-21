@@ -19,8 +19,8 @@
 .pdfFeatureAction { color: var(--nav); }
 .pdfFeatureAction:hover { background: #eaf0ff; }
 .tabs { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
-.tabs button { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--muted); font-weight: 650; }
-.tabs button[aria-pressed=true] { color: var(--brand); background: #e8efff; border-color: #c3d1f5; }
+.tabs :is(button, a) { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--muted); font-weight: 650; text-decoration: none; }
+.tabs :is([aria-pressed=true], [aria-current=page]) { color: var(--brand); background: #e8efff; border-color: #c3d1f5; }
 .list { padding: 20px; border-radius: 16px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
 .listHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
 .listHeading h2 { letter-spacing: -.035em; font-size: 22px; }

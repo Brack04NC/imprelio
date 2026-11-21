@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { plusDays } from './domain.ts';
 import { demoSiteOptions, localOperations, operationSamples } from './operations-demo.ts';
-import type { OperationRecord } from './operation-types.ts';
+import type { OperationRecord, SiteOption } from './operation-types.ts';
 import { maintenanceBookingError, overlapsVehicleMaintenance, periodsOverlap } from './vehicle-maintenance.ts';
 
 export const maxVehiclePeriods = 50;
@@ -47,6 +47,18 @@ export function isSelectableVehicle(subject: VehicleSubject) {
 
 export function isSelectableAssignee(subject: VehicleSubject) {
   return !subject.archived && vehicleAssigneeGroup(subject) !== null;
+}
+
+export function missingAssignmentTargets(assignments: VehicleAssignment[] | null, subjects: VehicleSubject[], sites: SiteOption[]) {
+  const subjectIds = new Set(subjects.map(subject => subject.id));
+  const siteIds = new Set(sites.map(site => site.id));
+  const operations = new Set<string>();
+  const worksites = new Set<string>();
+  for (const assignment of assignments ?? []) {
+    if (assignment.assignee_id && !subjectIds.has(assignment.assignee_id)) operations.add(assignment.assignee_id);
+    if (assignment.site_id && !siteIds.has(assignment.site_id)) worksites.add(assignment.site_id);
+  }
+  return { operation: [...operations], site: [...worksites] };
 }
 
 export function validateVehicleAssignment(raw: unknown): VehicleAssignmentAction {

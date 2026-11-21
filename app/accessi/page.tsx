@@ -9,10 +9,11 @@ export const metadata: Metadata = { title: 'Gestione accessi' };
 
 export default async function Accessi({ searchParams }: { searchParams: Promise<{ azienda?: string }> }) {
   const { azienda } = await searchParams;
-  const { identity, db, signedIn } = await session(azienda);
+  const organization = typeof azienda === 'string' ? azienda.toLowerCase() : null;
+  const { identity, db, signedIn } = await session(organization);
   if (!identity) redirect(signedIn ? '/login?errore=accesso' : '/login');
-  if (identity.org.role !== 'admin') notFound();
+  if (identity.org.role !== 'admin' || (db && organization && identity.org.id !== organization)) notFound();
   const today = romeDate();
   const access = db ? await readAccess(db, identity.org.id) : demoSeed(today).access;
-  return <AccessPage identity={identity} initial={access} today={today} />;
+  return <AccessPage key={identity.org.id} identity={identity} initial={access} today={today} />;
 }

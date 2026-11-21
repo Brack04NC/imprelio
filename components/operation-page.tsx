@@ -9,6 +9,7 @@ import { Drawer } from './editor';
 import { SiteFromEstimate } from './site-from-estimate';
 import { Shell, orgLink } from './shell';
 import { useTrashRemoval } from './trash-removal';
+import { documentIntakeHref } from '@/lib/document-intake';
 import { useRomeToday } from './use-rome-today';
 import type { Identity } from '@/lib/domain';
 import { demoKey } from '@/lib/demo';
@@ -40,6 +41,10 @@ function workerDeadlinesHref(identity: Identity, worker: string) {
   return orgLink('/gestione/operai/' + encodeURIComponent(worker) + '/scadenze', identity);
 }
 
+function vehicleHref(identity: Identity, vehicle: string) {
+  return orgLink('/gestione/veicoli/' + encodeURIComponent(vehicle), identity);
+}
+
 const maintenanceLabels = {
   active: 'In manutenzione', scheduled: 'Manutenzione programmata', past: 'Manutenzione conclusa',
 } as const;
@@ -49,9 +54,9 @@ function effectiveStatus(record: OperationRecord, today: string) {
   return period && vehicleMaintenanceState(period, today) === 'active' ? 'inactive' : record.status;
 }
 
-export function OperationPage({ identity, area, today: initialToday, initial, sites, requestedSite, requestedKind, requestedVehicle, requestedRecord }: {
+export function OperationPage({ identity, area, today: initialToday, initial, sites, requestedSite, requestedKind, requestedVehicle, requestedRecord, editVehicle }: {
   identity: Identity; area: OperationArea; today: string; initial: OperationRecord[]; sites: SiteOption[];
-  requestedSite?: string; requestedKind?: string; requestedVehicle?: string; requestedRecord?: string;
+  requestedSite?: string; requestedKind?: string; requestedVehicle?: string; requestedRecord?: string; editVehicle?: boolean;
 }) {
   const router = useRouter();
   const today = useRomeToday(initialToday, area === 'magazzino');
@@ -59,7 +64,8 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const kinds: readonly OperationKind[] = section.kinds;
   const linkedId = area === 'magazzino' && typeof requestedVehicle === 'string' && /^[a-f0-9-]{36}$/i.test(requestedVehicle)
     ? requestedVehicle.toLowerCase() : '';
-  const [kind, setKind] = useState(linkedId ? 'article' : kinds.find(value => value === requestedKind) ?? kinds[0]);
+  const fleetView = area === 'magazzino' && (requestedKind === 'veicoli' || Boolean(linkedId));
+  const [kind, setKind] = useState(fleetView ? 'article' : kinds.find(value => value === requestedKind) ?? kinds[0]);
   const [vehicleFilter, setVehicleFilter] = useState(linkedId);
   const [records, setRecords] = useState(initial);
   const [recordsReady, setRecordsReady] = useState(!identity.demo);
@@ -75,6 +81,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const focusBack = useRef<HTMLElement | null>(null);
   const selectedHeading = useRef<HTMLHeadingElement>(null);
   const selectedRevealed = useRef(false);
+  const linkedEditorOpened = useRef(false);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const inFlight = useRef(false);
   const definition = operationDefinition(kind);
@@ -82,6 +89,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const warehouseAvailability = useMemo(() => area === 'magazzino' ? getWarehouseAvailability(records) : new Map<string, bigint>(), [area, records]);
   const movementFor = editor && editor !== 'create' && 'movementFor' in editor ? editor.movementFor : '';
   const editingRecord = editor && editor !== 'create' && 'id' in editor ? editor : undefined;
+  const returnToVehicle = Boolean(editVehicle && editingRecord?.id === linkedId);
   const trash = useTrashRemoval(identity, { kind: 'operation', onChange(action, id) {
     setNotice(undefined);
     if (identity.demo) {
@@ -123,6 +131,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
 
   function selectKind(value: OperationKind) {
     if (value !== 'article') setVehicleFilter('');
+    if (value !== kind) setArchive(false);
     setKind(value); setStatus(''); setQuery(''); setPage(1); setNotice(undefined);
   }
 
@@ -132,6 +141,10 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   }
   function closeView() {
     setEditor(null);
+    if (returnToVehicle) {
+      router.replace(vehicleHref(identity, linkedId));
+      return;
+    }
     requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
   }
   function focusNotice() {
@@ -167,7 +180,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
           const previous = records.find(item => item.id === action.id)!;
           record = { ...previous, archived: action.action === 'archive', updated_at };
         }
-        router.refresh();
+        if (!returnToVehicle) router.refresh();
       }
       setRecords(previous => [record, ...previous.filter(item => item.id !== record.id)]);
       if (action.action === 'save' && action.kind === kind) {
@@ -180,7 +193,8 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
       }
       setNotice({ text: action.action === 'archive' ? 'Scheda archiviata.' : action.action === 'restore' ? 'Scheda ripristinata.' : 'Scheda salvata.' });
       if (editor) setEditor(null);
-      focusNotice();
+      if (returnToVehicle) router.replace(vehicleHref(identity, linkedId));
+      else focusNotice();
     } finally { inFlight.current = false; setBusy(false); }
   }
 
@@ -200,13 +214,14 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     && record.fields.category === 'vehicles');
   const linkedRecord = requestedRecord && records.find(record => record.id === requestedRecord && record.kind === kind && !record.archived);
   const hasFilters = Boolean(needle || status || filterBySite || filterByVehicle);
-  const active = records.filter(record => record.kind === kind && !record.archived).length;
-  const archived = records.filter(record => record.kind === kind && record.archived).length;
+  const kindRecords = records.filter(record => record.kind === kind && (!fleetView || record.fields.category === 'vehicles'));
+  const active = kindRecords.filter(record => !record.archived).length;
+  const archived = kindRecords.length - active;
   function matchesSearch(record: OperationRecord) {
     return !needle || [record.title, ...Object.values(record.fields), siteById.get(record.site_id ?? '')?.name]
       .some(value => value?.toLocaleLowerCase('it').includes(needle));
   }
-  const filtered = records.filter(record => record.kind === kind && record.archived === archive
+  const filtered = kindRecords.filter(record => record.archived === archive
     && (!filterBySite || record.site_id === filterBySite.id) && (!filterByVehicle || linkedVehicle && record.id === linkedVehicle.id)
     && (!status || effectiveStatus(record, today) === status) && matchesSearch(record))
     .sort((first, second) => Number(second.id === requestedRecord) - Number(first.id === requestedRecord)
@@ -218,6 +233,12 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     .map(record => ({ value: record.id, label: record.title + (record.fields.unit ? ' · ' + record.fields.unit : '') }));
   const needsArticle = kind === 'movement' && !articles.length;
   const selectedVisible = shown.some(record => record.id === requestedRecord);
+
+  useEffect(() => {
+    if (!editVehicle || !recordsReady || !linkedVehicle || linkedVehicle.archived || linkedEditorOpened.current || editor) return;
+    linkedEditorOpened.current = true;
+    setEditor(linkedVehicle);
+  }, [editVehicle, recordsReady, linkedVehicle, editor]);
 
   useEffect(() => {
     if (!recordsReady || !selectedVisible || selectedRevealed.current || !selectedHeading.current) return;
@@ -233,6 +254,13 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     openView('create');
   }
 
+  function warehouseHref(view: 'article' | 'movement' | 'veicoli') {
+    const params = new URLSearchParams();
+    if (view !== 'article') params.set('tipo', view);
+    if (selectedSite) params.set('cantiere', selectedSite.id);
+    return orgLink('/gestione/magazzino' + (params.size ? '?' + params : ''), identity);
+  }
+
   return <Shell identity={identity} section={area}>
     {selectedSite && <Link className="button text-button back-link" href={orgLink('/cantieri/' + selectedSite.id, identity)}>
       <ArrowLeft size={17}/> {selectedSite.name}</Link>}
@@ -241,6 +269,9 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         <h1>{section.title}</h1><p>{section.description}</p>
       </div></div>
       <div className={styles.recordActions}>
+        {(area === 'amministrazione' || area === 'computi-metrici') && <Link className="button secondary"
+          href={orgLink(documentIntakeHref(area === 'computi-metrici' ? 'estimate' : kind === 'invoice' ? 'invoice' : undefined,
+            selectedSite?.id), identity)}><FileUp size={18} aria-hidden="true"/> Importa documento</Link>}
         {area === 'personale' && <Link className="button secondary" href={attendanceHref(identity)}>
           <CalendarCheck size={18} aria-hidden="true"/> Presenze
         </Link>}
@@ -248,7 +279,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
           <Truck size={18}/> Assegnazioni veicoli
         </Link>}
         {kind !== 'estimate' && <button className="button primary" disabled={busy} onClick={openCreate}>
-          <Plus size={19}/> Aggiungi {needsArticle ? 'articolo' : definition.singular.toLocaleLowerCase('it')}
+          <Plus size={19}/> {fleetView ? 'Nuovo veicolo' : `Aggiungi ${needsArticle ? 'articolo' : definition.singular.toLocaleLowerCase('it')}`}
         </button>}
       </div>
     </header>
@@ -270,14 +301,20 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     {kinds.length > 1 && <div className={styles.tabs} role="group" aria-label="Tipo di scheda">
       {kinds.map(value => {
         const Icon = icons[value];
+        if (fleetView && (value === 'article' || value === 'movement')) {
+          return <Link key={value} href={warehouseHref(value)}><Icon size={18}/>{operationDefinition(value).plural}</Link>;
+        }
         return <button key={value} aria-pressed={value === kind} onClick={() => selectKind(value)}>
           <Icon size={18}/>{operationDefinition(value).plural}</button>;
       })}
+      {area === 'magazzino' && <Link href={warehouseHref('veicoli')} aria-current={fleetView ? 'page' : undefined}>
+        <Truck size={18}/> Veicoli
+      </Link>}
     </div>}
 
     <section className={styles.list} aria-labelledby="operation-list-heading">
-      <div className={styles.listHeading}><div><h2 id="operation-list-heading">{kind === 'estimate' ? 'Elenco computi' : definition.plural}</h2>
-        {kind !== 'estimate' && <p>{definition.description}</p>}</div>
+      <div className={styles.listHeading}><div><h2 id="operation-list-heading">{fleetView ? 'Veicoli' : kind === 'estimate' ? 'Elenco computi' : definition.plural}</h2>
+        {kind !== 'estimate' && <p>{fleetView ? 'Consulta i mezzi aziendali, le scadenze e lo storico di utilizzo.' : definition.description}</p>}</div>
         <div className={styles.listActions}>
           {kind === 'estimate' && <button className="button primary" disabled={busy} onClick={openCreate}>
             <Plus size={18}/> Aggiungi computo metrico
@@ -287,7 +324,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         </div>
       </div>
       <div className={`${styles.filters} ${definition.statuses.length === 1 || definition.site === 'none' ? styles.condensedFilters : ''}`}>
-        <label><span>Cerca</span><span className={styles.searchInput}><Search size={17}/><input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Cerca nelle schede"/></span></label>
+        <label><span>Cerca</span><span className={styles.searchInput}><Search size={17}/><input value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder={fleetView ? 'Cerca nome, targa o matricola' : 'Cerca nelle schede'}/></span></label>
         {definition.statuses.length > 1 && <label><span>Stato</span><select aria-label="Stato" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
           <option value="">Tutti gli stati</option>{definition.statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select></label>}
@@ -297,18 +334,19 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
       </div>
       {linkedVehicle && <div className={styles.linkedVehicle}>
         <span>Veicolo selezionato <strong>{linkedVehicle.title}</strong></span>
-        <button type="button" className="button text-button" onClick={() => { setVehicleFilter(''); setPage(1); }}>Mostra tutti gli articoli</button>
+        <button type="button" className="button text-button" onClick={() => { setVehicleFilter(''); setPage(1); }}>Mostra tutti i veicoli</button>
       </div>}
       {notice && <p ref={noticeRef} tabIndex={-1} role={notice.error ? 'alert' : 'status'} className={notice.error ? 'form-error' : styles.notice}>{notice.text}</p>}
       {recordsReady && requestedRecord && !linkedRecord && !archive && kind === (requestedKind ?? kinds[0]) &&
         <p role="status" className={styles.linkedVehicle}>La scheda collegata non è più disponibile tra le schede attive.</p>}
       {shown.length > 0 ? <ul className={styles.cards} role="list">{shown.map(record => {
-        const Icon = icons[record.kind];
         const site = siteById.get(record.site_id ?? '');
         const siteHref = site && orgLink('/cantieri/' + site.id, identity);
         const available = warehouseAvailability.get(record.id) ?? 0n;
         const low = record.kind === 'article' && isBelowMinimum(record, available);
         const isVehicle = record.kind === 'article' && record.fields.category === 'vehicles';
+        const Icon = isVehicle ? Truck : icons[record.kind];
+        const profile = isVehicle ? vehicleHref(identity, record.id) : null;
         const period = vehicleMaintenance(record);
         const maintenanceState = period ? vehicleMaintenanceState(period, today) : null;
         const cardStatus = maintenanceState === 'active' ? 'inactive' : record.status;
@@ -317,6 +355,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         const archiveLabel = record.archived ? 'Ripristina' : 'Archivia';
         const ArchiveIcon = record.archived ? RotateCcw : Archive;
         const contextActions: ContextAction[] = [{ label: openLabel, icon: Pencil, disabled: busy, onSelect: () => openView(record) }];
+        if (profile) contextActions.unshift({ label: 'Scheda veicolo', icon: Truck, href: profile });
         if (siteHref) contextActions.push({ label: 'Apri cantiere', icon: HardHat, href: siteHref });
         contextActions.push(
           { label: archiveLabel, icon: ArchiveIcon, disabled: busy, onSelect: () => toggleArchive(record) },
@@ -346,7 +385,10 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
             {low && <span className={styles.low}>Sotto scorta minima</span>}
             {site && siteHref && <Link className={styles.site} href={siteHref}>{site.name}<ArrowUpRight size={14}/></Link>}
             <div className={styles.recordActions}>
-              <button className="button secondary" data-context-primary="" disabled={busy}
+              {profile && <Link className="button secondary" data-context-primary="" href={profile} aria-label={`Scheda veicolo ${record.title}`}>
+                <Truck size={15} aria-hidden="true"/> Scheda veicolo
+              </Link>}
+              <button className="button secondary" data-context-primary={profile ? undefined : ''} disabled={busy}
                 onClick={() => openView(record)}><Pencil size={15}/>{openLabel}</button>
               {(record.kind === 'employee' || record.kind === 'worker') &&
                 <Link className="button secondary" href={attendanceHref(identity, record.id)} aria-label={`Presenze di ${record.title}`}>
@@ -388,7 +430,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     </section>
     {editor && <OperationEditor key={kind + ':' + (movementFor || editingRecord?.id || 'new')}
       definition={movementFor ? operationDefinition('movement') : definition} record={editingRecord} today={today}
-      identity={identity} sites={availableSites} articles={articles} movementFor={movementFor}
+      identity={identity} sites={availableSites} articles={articles} movementFor={movementFor} fleetView={fleetView && !movementFor}
       selectedSite={selectedSite?.id ?? ''} onClose={closeView} save={persist}
       onSiteCreated={site => setAvailableSites(previous => [site, ...previous.filter(item => item.id !== site.id)])}/>}
     {trash.feedback}
@@ -415,10 +457,10 @@ function InputField({ field, value, change, articles = [] }: {
     placeholder={field.placeholder} onChange={event => change(event.target.value)}/></label>;
 }
 
-function OperationEditor({ definition, record, today, identity, sites, articles, movementFor, selectedSite, onClose, save, onSiteCreated }: {
+function OperationEditor({ definition, record, today, identity, sites, articles, movementFor, fleetView, selectedSite, onClose, save, onSiteCreated }: {
   definition: Definition; record?: OperationRecord; today: string; sites: SiteOption[]; articles: Option[];
   identity: Identity; onSiteCreated: (site: SiteOption) => void;
-  movementFor: string; selectedSite: string; onClose: () => void; save: (action: OperationWrite) => Promise<void>;
+  movementFor: string; fleetView: boolean; selectedSite: string; onClose: () => void; save: (action: OperationWrite) => Promise<void>;
 }) {
   const lineFields = definition.lineFields ?? [];
   const [title, setTitle] = useState(record?.title ?? '');
@@ -428,7 +470,8 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
   const [siteEditor, setSiteEditor] = useState(false);
   const [siteNotice, setSiteNotice] = useState('');
   const siteSelect = useRef<HTMLSelectElement>(null);
-  const [fields, setFields] = useState(() => initialValues(definition.fields, record?.fields ?? { article_id: movementFor }));
+  const [fields, setFields] = useState(() => initialValues(definition.fields,
+    fleetView ? { ...record?.fields, category: 'vehicles' } : record?.fields ?? { article_id: movementFor }));
   const [maintenance, setMaintenance] = useState(() => {
     const period = record ? vehicleMaintenance(record) : null;
     return { enabled: Boolean(period), start_date: period?.start_date ?? '', end_date: period?.end_date ?? '' };
@@ -447,6 +490,7 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
   const hint = definition.totals?.(fields, lines.map(line => line.fields));
   const readOnly = Boolean(record?.archived);
   const isVehicle = definition.kind === 'article' && fields.category === 'vehicles';
+  const fixedVehicleKind = fleetView || (isVehicle && record?.fields.category === 'vehicles');
   const attendancePerson = record && (record.kind === 'employee' || record.kind === 'worker') ? record : null;
   const personChanged = attendancePerson && (
     title !== attendancePerson.title || status !== attendancePerson.status || date !== (attendancePerson.record_date ?? '')
@@ -492,14 +536,16 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
     } finally { inFlight.current = false; setBusy(false); }
   }
 
-  const subject = definition.singular.toLocaleLowerCase('it');
+  const subject = isVehicle ? 'veicolo' : definition.singular.toLocaleLowerCase('it');
+  const editorTitle = record ? (readOnly ? record.title : 'Modifica ' + subject) : isVehicle ? 'Nuovo veicolo' : 'Aggiungi ' + subject;
+  const editorFields = applicableFields(definition.fields, fields).filter(field => !fixedVehicleKind || field.key !== 'category');
   const createSite = definition.kind === 'estimate' && !readOnly && !site;
   function closeSiteEditor() {
     setSiteEditor(false);
     requestAnimationFrame(() => siteSelect.current?.focus());
   }
 
-  return <><Drawer title={readOnly ? record!.title : (record ? 'Modifica ' : 'Aggiungi ') + subject} onClose={onClose} busy={busy}>
+  return <><Drawer title={editorTitle} onClose={onClose} busy={busy}>
     <form className="editor-form" onSubmit={submit}>
       <div className={attendancePerson ? `drawer-fields ${styles.personDrawerFields}` : 'drawer-fields'}>
         {attendancePerson && <div className={styles.attendanceAction}>
@@ -515,7 +561,7 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
             </>}
         </div>}
         <fieldset className={`form-grid ${styles.editorFields}`} disabled={busy || readOnly}>
-          <label>{definition.titleLabel}<input autoFocus maxLength={160} required value={title} onChange={event => setTitle(event.target.value)}/></label>
+          <label>{isVehicle ? 'Nome veicolo' : definition.titleLabel}<input autoFocus maxLength={160} required value={title} onChange={event => setTitle(event.target.value)}/></label>
           <div className={definition.statuses.length > 1 && definition.dateLabel ? 'form-pair' : undefined}>
             {definition.statuses.length > 1 && <label>Stato<select aria-label="Stato" value={status} onChange={event => setStatus(event.target.value)}>
               {definition.statuses.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
@@ -532,7 +578,8 @@ function OperationEditor({ definition, record, today, identity, sites, articles,
             </button>}
             {siteNotice && <p role="status" className={styles.notice}>{siteNotice}</p>}
           </div>}
-          {applicableFields(definition.fields, fields).map(field => <InputField key={field.key} field={field} value={fields[field.key]}
+          {editorFields.map(field => <InputField key={field.key}
+            field={isVehicle && field.key === 'location' ? { ...field, label: 'Posizione del veicolo', placeholder: 'Es. Deposito principale' } : field} value={fields[field.key]}
             articles={articles} change={value => setFields(previous => ({ ...previous, [field.key]: value }))}/>)}
           {isVehicle && <section className={styles.maintenanceEditor}>
             <label className={styles.maintenanceToggle}><input type="checkbox" checked={maintenance.enabled} onChange={event => {

@@ -1,5 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-import { estimateHeaderText, estimateImportWarnings, readEstimatePages, type PdfPage } from './estimate-import';
+import { parseDocumentText } from './document-extraction-fields';
+import { estimateHeaderText, estimateImportWarnings, estimatePlainText, readEstimatePages, type PdfPage } from './estimate-import';
 import { estimatePdfMaxBytes } from './estimate-pdf-archive';
 import { extractEstimateSite } from './estimate-site';
 
@@ -22,6 +23,7 @@ export async function extractEstimate(file: File, onPage: (page: number, total: 
       onPage(number, document.numPages);
     }
     const siteDetails = extractEstimateSite(estimateHeaderText(pages));
+    const documentExtraction = { ...parseDocumentText(estimatePlainText(pages), file.name), kind: 'estimate' as const };
     const rows = readEstimatePages(pages);
     const importIssue = !rows.length
       ? (pages.some(page => page.items.some(item => item.text.trim()))
@@ -30,9 +32,9 @@ export async function extractEstimate(file: File, onPage: (page: number, total: 
       : rows.length > 350 ? 'Il computo supera 350 voci. Dividilo in più PDF per importare le lavorazioni.' : '';
     if (importIssue) {
       if (!Object.values(siteDetails).some(Boolean)) throw new Error(importIssue);
-      return { items: [], warnings: [], siteDetails, importIssue };
+      return { items: [], warnings: [], siteDetails, importIssue, documentExtraction };
     }
-    return { items: rows, warnings: estimateImportWarnings(pages, rows), siteDetails, importIssue };
+    return { items: rows, warnings: estimateImportWarnings(pages, rows), siteDetails, importIssue, documentExtraction };
   } finally {
     await task.destroy();
   }

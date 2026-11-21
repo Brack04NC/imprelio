@@ -94,6 +94,29 @@ test('La revisione apre il veicolo e la cronologia conserva la scadenza preceden
   assert.equal(history[0].date, '2026-11-19');
 });
 
+test('Assicurazione, bollo, revisione e tagliando hanno promemoria distinti per lo stesso veicolo', () => {
+  const vehicle = record('truck', 'article', 'active', {
+    category: 'vehicles', code: 'TRK-001', insurance_due_on: today, road_tax_due_on: '2026-12-20',
+    revision_due_on: '2026-11-19', service_due_on: '2026-11-21',
+  });
+  const operations = [vehicle,
+    record('future', 'article', 'active', { category: 'vehicles', insurance_due_on: '2026-12-21', service_due_on: '' }),
+    record('invalid-date', 'article', 'active', { category: 'vehicles', road_tax_due_on: '2026-11-31' }),
+    record('materials', 'article', 'active', { category: 'materials', insurance_due_on: today }),
+    record('archived', 'article', 'active', { category: 'vehicles', service_due_on: today }, { archived: true }),
+  ];
+  const entries = buildNotifications({ ...sources, operations }, today);
+  assert.deepEqual(entries.map(({ id, priority, status }) => [id, priority, status]), [
+    ['vehicle-review:truck', 'urgent', 'Scaduta'], ['vehicle-insurance:truck', 'urgent', 'Scade oggi'],
+    ['vehicle-service:truck', 'soon', 'In scadenza'], ['vehicle-road-tax:truck', 'soon', 'In scadenza'],
+  ]);
+  assert.ok(entries.every(({ category, href, detail }) => category === 'vehicles' && href === '/gestione/magazzino?veicolo=truck' && detail === 'TRK-001'));
+  const history = buildNotifications({ ...sources, operations }, today, true);
+  assert.deepEqual(history.map(({ id, status, priority }) => [id, status, priority]), [
+    ['vehicle-service:archived', 'Veicolo archiviato', 'info'],
+  ]);
+});
+
 test('La cronologia usa gli interventi conclusi e aggiorna un avviso già rilevato senza duplicarlo', async () => {
   const { mergeNotificationHistory, notificationOccurrenceKey } = await import('../lib/notifications.ts');
   const currentJob = job('work', '2026-11-19');

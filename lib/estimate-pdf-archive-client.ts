@@ -51,7 +51,7 @@ function localArchive<T>(mode: IDBTransactionMode, run: (files: IDBObjectStore) 
   });
 }
 
-export async function listEstimatePdfs(organization: string, demo: boolean, site: string, signal: AbortSignal) {
+export async function listEstimatePdfs(organization: string, demo: boolean, site: string, signal?: AbortSignal) {
   if (demo) {
     const items = await localArchive<StoredPdf[]>('readonly', files => files.getAll());
     const trash = demoTombstoneIds('estimate_pdf');
@@ -102,9 +102,14 @@ export async function getDemoEstimatePdf(id: string) {
   return metadata;
 }
 
-export async function downloadDemoEstimatePdf(id: string) {
+export async function readDemoEstimatePdfBlob(id: string) {
   const file = await localArchive<StoredPdf | undefined>('readonly', files => files.get(id));
   if (!file || isDemoTombstoned('estimate_pdf', id)) throw new Error('Il PDF non è più disponibile in questo browser.');
+  return { blob: file.blob, file_name: file.file_name };
+}
+
+export async function downloadDemoEstimatePdf(id: string) {
+  const file = await readDemoEstimatePdfBlob(id);
   const url = URL.createObjectURL(file.blob);
   const link = document.createElement('a');
   link.href = url;

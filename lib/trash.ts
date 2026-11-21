@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const trashKinds = ['intervention', 'quote', 'operation', 'client', 'site', 'worker_deadline', 'estimate_pdf'] as const;
+export const trashKinds = ['intervention', 'quote', 'operation', 'client', 'site', 'worker_deadline', 'estimate_pdf', 'document_import'] as const;
 export type TrashKind = typeof trashKinds[number];
 
 export const trashActionSchema = z.strictObject({
@@ -11,6 +11,7 @@ export const trashActionSchema = z.strictObject({
 
 export type TrashAction = z.infer<typeof trashActionSchema>;
 export type TrashEntry = { id: string; kind: TrashKind; label: string; deleted_at: string };
+export type TrashLabel = Pick<TrashEntry, 'id' | 'kind' | 'label'>;
 
 export const trashLabels: Record<TrashKind, { name: string; singular: string; deleted: string; restored: string }> = {
   intervention: { name: 'Interventi', singular: 'l’intervento', deleted: 'Intervento eliminato', restored: 'Intervento ripristinato' },
@@ -20,4 +21,5 @@ export const trashLabels: Record<TrashKind, { name: string; singular: string; de
   site: { name: 'Cantieri', singular: 'il cantiere', deleted: 'Cantiere eliminato', restored: 'Cantiere ripristinato' },
   worker_deadline: { name: 'Scadenze operai', singular: 'la scadenza', deleted: 'Scadenza eliminata', restored: 'Scadenza ripristinata' },
   estimate_pdf: { name: 'PDF originali', singular: 'il PDF', deleted: 'PDF eliminato', restored: 'PDF ripristinato' },
+  document_import: { name: 'Documenti importati', singular: 'il documento', deleted: 'Documento eliminato', restored: 'Documento ripristinato' },
 };

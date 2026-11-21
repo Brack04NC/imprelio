@@ -21,4 +21,4 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ['/', '/cantieri/:path*', '/agenda', '/notifiche', '/clienti', '/gestione/:path*', '/accessi', '/api/:path*'] };
+export const config = { matcher: ['/', '/cantieri/:path*', '/agenda', '/notifiche', '/clienti', '/gestione/:path*', '/accessi', '/auth/imposta-password', '/api/:path*'] };

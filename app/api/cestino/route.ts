@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
   if (!error) return NextResponse.json({ ok: true }, { headers });
   const extended = kind !== 'intervention' && kind !== 'quote';
   if (error.code === 'PGRST202' || error.code === '42883' || (extended && error.code === '22023')) {
+    if (kind === 'document_import') return failure('Attiva il cestino dei documenti importati con la migrazione 019 in Supabase.', 503);
     return failure(extended ? 'Attiva il cestino delle schede con le migrazioni 013 e 014 in Supabase.'
       : 'Attiva il cestino eseguendo la migrazione 008 in Supabase.', 503);
   }
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
   }
   if (error.code === 'P0002') return failure('L’elemento non è più disponibile.', 404);
   if (error.code === '23503') return failure(kind === 'site' ? 'Ripristina prima il cliente collegato.'
-    : 'Ripristina prima la scheda collegata.', 409);
+    : kind === 'document_import' ? 'Ripristina prima il cantiere collegato.' : 'Ripristina prima la scheda collegata.', 409);
   if (error.code === '23505') return failure('L’elemento è già presente.', 409);
   if (error.code === '22023') return failure('Richiesta non valida.', 400);
   return failure(action === 'delete' ? 'Eliminazione non riuscita. Riprova.' : 'Ripristino non riuscito. Riprova.', 500);

@@ -65,6 +65,11 @@ export function estimateHeaderText(pages: PdfPage[]) {
   return pages.slice(0, 2).map(page => textRows(page.items).slice(0, 36).map(row => rowText(row.items)).join('\n')).join('\f');
 }
 
+export function estimatePlainText(pages: PdfPage[]) {
+  return pages.map(page => textRows(page.items).map(row => rowText(row.items)).join('\n'))
+    .filter(Boolean).join('\n\n');
+}
+
 function formatOf(page: PdfPage) {
   const heading = (value: RegExp) => page.items.find(item => value.test(item.text.trim()));
   const quantity = heading(/^quantit[àa]$/i);

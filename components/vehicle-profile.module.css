@@ -1,0 +1,124 @@
+.profile {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.header, .heading, .panelHeader, .actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.header, .panelHeader { justify-content: space-between; }
+.header { align-items: flex-end; }
+.header > div, .heading { min-width: 0; }
+
+.back {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  color: var(--brand);
+  font-weight: 620;
+}
+
+.back:hover, .siteLink:hover { text-decoration: underline; }
+.heading > svg { color: var(--brand); }
+.heading h1 { font-size: clamp(23px, 3vw, 32px); line-height: 1.2; overflow-wrap: anywhere; }
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.panel { padding: clamp(13px, 2.5vw, 20px); }
+.panel h2 { font-size: 17px; }
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  margin: 16px 0 0;
+}
+
+.fields dt, .rowData small {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fields dd, .deadlines dd { margin: 0; overflow-wrap: anywhere; }
+.fields dd { font-weight: 610; }
+.fields .locationDate { margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.notes { grid-column: 1 / -1; }
+.notes dd { font-weight: 400; white-space: pre-wrap; }
+
+.deadlines { margin: 7px 0 0; }
+.deadlines > div, .periods > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.deadlines > div:last-child, .periods > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.deadlines dt { font-weight: 610; }
+.deadlines dd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.deadlines time, .rowData > span { color: var(--muted); font-size: 13px; }
+
+.badge, .maintenance {
+  --tone-ink: #3e506b;
+  --tone-surface: #edf1f7;
+  color: var(--tone-ink);
+  background: var(--tone-surface);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.badge[data-tone='active'] { --tone-ink: #125b47; --tone-surface: #e2f5eb; }
+.badge[data-tone='scheduled'], .badge[data-tone='future'], .maintenance[data-tone='scheduled'] {
+  --tone-ink: #244d86; --tone-surface: #eaf1ff;
+}
+.badge[data-tone='due'] { --tone-ink: #7a4a08; --tone-surface: #fff1d2; }
+.badge[data-tone='expired'], .maintenance[data-tone='active'] { --tone-ink: #932c36; --tone-surface: #ffeced; }
+
+.maintenance {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.maintenance p { margin-top: 3px; font-size: 13px; }
+.periods { margin: 8px 0 0; list-style: none; padding: 0; }
+.rowData { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.rowData small { margin: 0; }
+.siteLink { width: fit-content; color: var(--brand); font-weight: 640; }
+.empty { color: var(--muted); margin-top: 12px; }
+.history { margin-top: 14px; border-top: 1px solid var(--line); }
+.history summary { min-height: 44px; padding: 12px 0; font-weight: 620; }
+.history .periods { margin-top: 0; }
+
+@media (max-width: 760px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 420px) {
+  .fields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}

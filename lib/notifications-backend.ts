@@ -6,11 +6,13 @@ import { plusDays } from './domain';
 import { readQuotes } from './estimate-pricing-backend';
 import {
   buildNotifications, mergeNotificationHistory, notificationOccurrenceKey, notificationAgendaDays, notificationDeadlineDays, notificationReadyDays,
+  vehicleNotificationDeadlines,
   type NotificationCategory, type NotificationFeed, type NotificationHistoryEntry, type NotificationItem, type NotificationSources,
 } from './notifications';
 
 type Database = Awaited<ReturnType<typeof database>>;
 const pageSize = 500;
+const vehicleDeadlineFilter = vehicleNotificationDeadlines.map(({ field }) => `fields->>${field}.not.is.null`).join(',');
 
 async function readNotificationOperations(db: Database, org: string, type: 'documents' | 'estimates' | 'vehicles', since: string, history: boolean) {
   const records: NotificationSources['operations'] = [];
@@ -23,7 +25,7 @@ async function readNotificationOperations(db: Database, org: string, type: 'docu
       if (history) query.in('kind', ['invoice', 'order']);
       else query.or('and(kind.eq.invoice,status.eq.open),and(kind.eq.order,status.in.(sent,confirmed))');
     } else if (type === 'vehicles') {
-      query.eq('kind', 'article').eq('fields->>category', 'vehicles').not('fields->>revision_due_on', 'is', null);
+      query.eq('kind', 'article').eq('fields->>category', 'vehicles').or(vehicleDeadlineFilter);
     } else {
       query.eq('kind', 'estimate');
       if (!history) query.or(`status.in.(draft,review),and(status.eq.approved,updated_at.gte.${since})`);

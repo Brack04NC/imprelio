@@ -1,5 +1,6 @@
 import { demoKey, getDemoBacking } from './demo.ts';
 import { kindLabels, romeDate, type Job } from './domain.ts';
+import { getDemoIntakeDocument } from './document-intake-demo.ts';
 import { getDemoEstimatePdf } from './estimate-pdf-archive-client.ts';
 import { estimatePricingKey, localPrices } from './estimate-pricing-demo.ts';
 import type { QuoteSummary } from './estimate-pricing.ts';
@@ -121,6 +122,7 @@ async function mutateDemoTrash(action: TrashAction, today: string) {
 
   const { kind, id } = action;
   const file = kind === 'estimate_pdf' ? await getDemoEstimatePdf(id) : null;
+  const document = kind === 'document_import' ? await getDemoIntakeDocument(id) : null;
   const trash = readDemoTombstones();
   const found = trash.some(entry => entry.kind === kind && entry.id === id);
   const restore = action.action === 'restore';
@@ -157,6 +159,12 @@ async function mutateDemoTrash(action: TrashAction, today: string) {
     }
     case 'estimate_pdf':
       label = file?.file_name;
+      break;
+    case 'document_import':
+      label = document?.file_name;
+      if (restore && found && document?.site_id && isDemoTombstoned('site', document.site_id)) {
+        throw new Error('Ripristina prima il cantiere collegato.');
+      }
   }
   if (!label) throw new Error('L’elemento non è più disponibile.');
   if (restore && !found) return;

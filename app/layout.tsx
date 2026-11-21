@@ -5,6 +5,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: { default: 'Imprelio', template: '%s · Imprelio' },
   description: 'Organizza i cantieri e pianifica gli interventi di ponteggio.',
+  robots: { index: false, follow: false },
   icons: {
     icon: [
       { url: '/brand/imprelio-favicon.ico', type: 'image/x-icon' },

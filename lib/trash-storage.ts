@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { TrashEntry, TrashKind } from './trash.ts';
 
 export const demoTrashKey = 'imprelio-cestino-schede-v1';
-const kinds = ['operation', 'client', 'site', 'worker_deadline', 'estimate_pdf'] as const;
+const kinds = ['operation', 'client', 'site', 'worker_deadline', 'estimate_pdf', 'document_import'] as const;
 type TombstoneKind = Extract<TrashKind, typeof kinds[number]>;
 type Tombstone = TrashEntry & { kind: TombstoneKind };
 const tombstones = z.array(z.object({ kind: z.enum(kinds), id: z.uuid(), label: z.string(), deleted_at: z.iso.datetime() }));

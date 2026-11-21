@@ -12,6 +12,7 @@ import { SiteFromEstimate } from './site-from-estimate';
 import { orgLink } from './shell';
 import { useTrashRemoval } from '@/components/trash-removal';
 import type { Client, Identity } from '@/lib/domain';
+import { documentIntakeHref, type DocumentExtraction } from '@/lib/document-intake';
 import { demoKey, getDemo } from '@/lib/demo';
 import type { SiteOption } from '@/lib/operation-types';
 import { demoSiteOptions } from '@/lib/operations-demo';
@@ -30,7 +31,7 @@ type DraftItem = ImportedItem & Pick<QuoteLine, 'sourceTitle' | 'sourceDescripti
   selected: boolean; manualPrice: string | null; saved?: boolean; sourceChecked?: boolean;
 };
 type Draft = { id: string; title: string; site: string; clientFilter?: string; siteDetails?: SitePrefill; createdSite?: string; importIssue?: string;
-  fileName: string; originalFile?: File; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
+  fileName: string; originalFile?: File; documentExtraction?: DocumentExtraction; items: DraftItem[]; warnings: string[]; warningsReviewed: boolean };
 type ReviewRow = { item: DraftItem; price: string; index: number; reason: string; line: QuoteLine | null; total: bigint | null;
   sourceMismatch: boolean; appliedRate: EstimateRate | null };
 const rowsPerPage = 12;
@@ -245,7 +246,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         const { extractEstimate } = await import('@/lib/estimate-pdf');
         const latestRates: Promise<EstimateRate[] | null> = identity.demo ? Promise.resolve(localPrices().rates)
           : remote(new URLSearchParams({ vista: 'listino' })).catch(() => null);
-        const [{ items, warnings, siteDetails, importIssue }, refreshedRates] = await Promise.all([
+        const [{ items, warnings, siteDetails, importIssue, documentExtraction }, refreshedRates] = await Promise.all([
           extractEstimate(file, (current, total) => setProgress(`Lettura pagina ${current} di ${total}…`)),
           latestRates,
         ]);
@@ -256,7 +257,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         const sameFile = draft?.fileName === fileName;
         const site = sameFile ? draft.site : stableSite;
         setDraft({ ...makeDraft(items, fileName, site, warnings, siteDetails), clientFilter: sameFile ? draft.clientFilter : undefined,
-          importIssue, originalFile: file });
+          importIssue, originalFile: file, documentExtraction });
         setSavedDraft(null); setDraftFilter('all'); setFocusedRow(null); setPage(1);
       } finally { setProgress(''); }
     });
@@ -339,6 +340,8 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
     if (!draft || !ready) return;
     await transact(async () => {
       const quote: QuoteInput = { id: draft.id, site_id: draft.site, title: draft.title.trim(), source_name: draft.fileName, lines };
+      if (draft.originalFile && !archivedOriginal && archive.state === 'ready'
+        && !await archive.save(draft.id, draft.site, draft.originalFile, draft.documentExtraction)) return;
       let summary: QuoteSummary;
       if (identity.demo) {
         if (isDemoTrashed('quote', quote.id)) throw new Error('Il preventivo è nel cestino. Ripristinalo prima di salvarlo.');
@@ -407,7 +410,11 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         <ArrowLeft size={16}/> Computi metrici
       </Link>
       <header className="page-header"><div><h1 tabIndex={-1} ref={pageHeading}>Preventivi da PDF</h1>
-        <p>Applica il tuo listino al computo e verifica le voci prima di salvare.</p></div></header>
+        <p>Applica il tuo listino al computo e verifica le voci prima di salvare.</p></div>
+        <Link className="button secondary" href={orgLink(documentIntakeHref('quote', stableSite || undefined), identity)}>
+          <FileUp size={18} aria-hidden="true"/> Importa un preventivo esistente
+        </Link>
+      </header>
       <PdfImportPanel busy={busy || archive.saving} replacing={Boolean(draft)} onFile={file => void loadPdf(file)} onError={setError}/>
       {!draft && identity.demo && <button className={`button text-button ${styles.example}`} disabled={busy} onClick={() => {
         setDraft(makeDraft([demonstration], 'Esempio ponteggio.pdf', stableSite || availableSites[0]?.id || ''));
@@ -504,7 +511,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
             <span role="status">PDF originale salvato nel cantiere.</span>
             <DownloadEstimatePdf identity={identity} file={archivedOriginal} label="Scarica PDF originale"/>
           </> : <button type="button" className="button secondary" disabled={busy || archive.saving || archive.state !== 'ready' || !draftSite}
-            onClick={() => { if (draft.originalFile && draftSite) void archive.save(draft.id, draftSite.id, draft.originalFile); }}>
+            onClick={() => { if (draft.originalFile && draftSite) void archive.save(draft.id, draftSite.id, draft.originalFile, draft.documentExtraction); }}>
             <Save size={17} aria-hidden="true"/>{archive.saving ? 'Salvataggio PDF…' : 'Salva PDF originale'}
           </button>}
           {!draftSite && <p>Seleziona o crea un cantiere per archiviare il PDF.</p>}
@@ -577,7 +584,9 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
           {!draftSite && <p>Seleziona il cantiere per salvare.</p>}
           {!included.length && <p>Includi almeno una voce nel preventivo.</p>}
           <button type="button" className="button secondary" disabled={!ready || busy} onClick={() => window.print()}><Printer size={17}/> Stampa o salva PDF</button>
-          <button type="button" className="button primary" disabled={!ready || busy} onClick={() => void saveQuote()}><Save size={17}/> Salva preventivo</button>
+          <button type="button" className="button primary" disabled={!ready || busy || archive.saving
+            || (Boolean(draft.originalFile) && !archivedOriginal && archive.state === 'loading')}
+            onClick={() => void saveQuote()}><Save size={17}/> Salva preventivo</button>
         </footer></>}
       </section>}
       {siteEditor && draft && <SiteFromEstimate prefill={draft.siteDetails ?? { name: draft.title, city: '', address: '', clientName: '' }}

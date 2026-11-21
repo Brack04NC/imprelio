@@ -1,6 +1,6 @@
 import 'server-only';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type User } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { demoIdentity } from './demo';
 import type { Access, Action, Client, Identity, Organization, Workspace, WorkspaceInput } from './domain';
@@ -85,6 +85,10 @@ export function authRedirect() {
   return url.href;
 }
 
+export function needsInvitationPassword(user: User) {
+  return user.user_metadata.imprelio_password_pending === true;
+}
+
 export async function write(db: Database, org: Organization, action: Action) {
   const { error } = await db.rpc('imprelio_write', { org: org.id, payload: action });
   if (error) {
@@ -96,7 +100,9 @@ export async function write(db: Database, org: Organization, action: Action) {
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!secret) return 'Invito registrato. Configura l’invio email e riprova.';
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, secret, { auth: { persistSession: false, autoRefreshToken: false } });
-  const result = await admin.auth.admin.inviteUserByEmail(action.email, { redirectTo: authRedirect() });
+  const result = await admin.auth.admin.inviteUserByEmail(action.email, {
+    redirectTo: authRedirect(), data: { imprelio_password_pending: true },
+  });
   if (result.error?.code === 'email_exists' || result.error?.code === 'user_already_exists') {
     const existing = await db.auth.signInWithOtp({
       email: action.email, options: { shouldCreateUser: false, emailRedirectTo: authRedirect() },

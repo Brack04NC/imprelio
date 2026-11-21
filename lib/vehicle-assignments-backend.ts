@@ -23,11 +23,14 @@ function normalizeAssignment(assignment: AssignmentRow): VehicleAssignment {
   return { id, vehicle_id, assignee_id, site_id, periods, updated_at };
 }
 
-export async function readVehicleAssignmentList(db: Database, organization: string) {
+export async function readVehicleAssignmentList(db: Database, organization: string, vehicle?: string) {
   const assignments: VehicleAssignment[] = [];
   let supportsSiteAssignment = true;
-  const readPage = (columns: string, offset: number) => db.from('vehicle_assignments').select(columns)
-    .eq('organization_id', organization).order('id').range(offset, offset + pageSize - 1);
+  const readPage = (columns: string, offset: number) => {
+    const query = db.from('vehicle_assignments').select(columns).eq('organization_id', organization);
+    if (vehicle) query.eq('vehicle_id', vehicle);
+    return query.order('id').range(offset, offset + pageSize - 1);
+  };
   for (let offset = 0; ; offset += pageSize) {
     let page = await readPage(supportsSiteAssignment ? assignmentColumns + ',site_id' : assignmentColumns, offset);
     if (offset === 0 && isSiteColumnMissing(page.error)) {
@@ -60,6 +63,10 @@ async function readSubjects(db: Database, organization: string, kind: 'vehicle' 
 export async function readVehicleSubjects(db: Database, organization: string) {
   const [vehicles, assignees] = await Promise.all([readSubjects(db, organization, 'vehicle'), readSubjects(db, organization, 'assignee')]);
   return [...vehicles, ...assignees];
+}
+
+export function readVehicleAssignees(db: Database, organization: string) {
+  return readSubjects(db, organization, 'assignee');
 }
 
 export async function writeVehicleAssignment(db: Database, organization: string, action: VehicleAssignmentAction) {

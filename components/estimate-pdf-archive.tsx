@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import { formatDate, romeDate, type Identity } from '@/lib/domain';
 import type { EstimatePdfFile } from '@/lib/estimate-pdf-archive';
 import { archiveEstimatePdf, downloadDemoEstimatePdf, estimatePdfDownloadUrl, listEstimatePdfs, PdfArchiveError } from '@/lib/estimate-pdf-archive-client';
+import type { DocumentExtraction } from '@/lib/document-intake';
+import { attachImportedEstimateExtraction, DocumentIntakeError } from '@/lib/document-intake-client';
 import type { SiteOption } from '@/lib/operation-types';
 import type { TrashAction } from '@/lib/trash';
 import { demoTrashKey, isDemoTombstoned } from '@/lib/trash-storage';
@@ -51,8 +53,8 @@ export function useEstimatePdfArchive(identity: Identity, scopedSite: string) {
     return () => window.removeEventListener('storage', syncOnStorage);
   }, [identity.demo]);
 
-  async function save(draft: string, site: string, original: File) {
-    if (active.current || state !== 'ready' || !site) return;
+  async function save(draft: string, site: string, original: File, extraction?: DocumentExtraction) {
+    if (active.current || state !== 'ready' || !site) return false;
     const key = archiveKey(draft, site);
     active.current = true;
     setSaving(true);
@@ -63,9 +65,19 @@ export function useEstimatePdfArchive(identity: Identity, scopedSite: string) {
       const id = previousId && !removed ? previousId : crypto.randomUUID();
       ids.current.set(key, id);
       const file = await archiveEstimatePdf(org, identity.demo, id, site, original);
+      if (extraction) {
+        try { await attachImportedEstimateExtraction(identity, file.id, extraction); }
+        catch (error) {
+          if (!(error instanceof DocumentIntakeError && error.code === 'migration_missing')) {
+            throw new Error('Il PDF è stato caricato, ma i dati estratti sono ancora da salvare. Riprova.');
+          }
+        }
+      }
       setFiles(previous => [file, ...previous.filter(item => item.id !== file.id)]);
+      return true;
     } catch (error) {
       setFailure({ key, message: error instanceof Error ? error.message : 'Salvataggio del PDF non riuscito. Riprova.' });
+      return false;
     } finally {
       active.current = false;
       setSaving(false);
