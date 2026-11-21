@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import Link from 'next/link';
 import { ArrowLeft, CalendarDays, Pencil, Plus, Search, Trash2, Truck, Wrench, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -292,7 +293,7 @@ export function VehicleAssignments({ identity, initial, subjects, sites, today: 
         <button ref={newButton} type="button" className="button primary" onClick={() => open()}><Plus size={18}/> Nuova assegnazione</button>
       </div>
     </div>
-    {notice && <p className="access-notice" role="status">{notice}</p>}
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     <section className={`panel ${styles.listPanel}`} aria-label="Elenco assegnazioni">
       <div className={styles.toolbar}>
         <div className={styles.filters} role="group" aria-label="Stato delle assegnazioni">

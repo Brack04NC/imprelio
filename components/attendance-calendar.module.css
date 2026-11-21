@@ -42,7 +42,6 @@
 .entryMeta a { min-width: 0; color: var(--brand); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
 .empty { border-block-start: 1px solid var(--line); padding-inline: 12px; }
 .readOnly { padding: 12px 15px; border-block-start: 1px solid var(--line); }
-.notice { margin: 0 15px 12px; padding: 9px 11px; border-radius: 8px; background: #e7f5ee; color: #176346; font-size: 13px; }
 .allDay { display: flex !important; align-items: center; gap: 8px !important; min-height: 44px; }
 .allDay input[type='checkbox'] { flex: none; width: 19px; min-height: 19px; height: 19px; padding: 0; accent-color: var(--brand); }
 .times label { min-width: 0; }

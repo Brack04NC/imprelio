@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, Building2, ChevronRight, HardHat, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
@@ -166,7 +167,7 @@ export function ClientDirectory({ identity, initial, today }: { identity: Identi
       <div><h1>Clienti</h1><p>Gestisci le anagrafiche e consulta i cantieri assegnati a ogni cliente.</p></div>
       <button className="button primary" onClick={event => openEditor('new', event.currentTarget)}><Plus size={19}/> Nuovo cliente</button>
     </header>
-    {notice && <p className="access-notice" role="status">{notice}</p>}
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     <div className={styles.grid}>
       <section className={`panel ${styles.directory}`} aria-label="Elenco clienti">
         <header className="panel-header">

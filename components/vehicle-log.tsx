@@ -7,6 +7,7 @@ import type { SiteOption } from '@/lib/operation-types';
 import { assigneeGroups, isSelectableAssignee, vehicleAssigneeGroup, type VehicleSubject } from '@/lib/vehicle-assignments';
 import { compareVehicleLogs, type VehicleLogEntry, type VehicleLogInput, type VehicleLogKind } from '@/lib/vehicle-log';
 import { Drawer } from './editor';
+import { StatusToast } from './feedback-toast';
 import styles from './vehicle-log.module.css';
 
 type Mode = 'usage' | 'intervention';
@@ -81,12 +82,12 @@ export function VehicleLog({ entries, today, vehicleId, subjects, sites, editabl
   }
 
   return <>
+    <StatusToast text={notice ? (notice === 'usage' ? 'Utilizzo salvato.' : 'Intervento salvato.') : ''} onClose={() => setNotice(null)}/>
     <section className={`panel ${styles.panel}`} id="registro-utilizzo" aria-labelledby={id + '-usage'}>
       <header className={`panel-header ${styles.header}`}>
         <div><h2 id={id + '-usage'} ref={usageHeading} tabIndex={-1}>Registro di utilizzo</h2><p>Utilizzi effettivi del mezzo, con operatore, periodo e luogo.</p></div>
         {editable && <button type="button" className="button secondary" onClick={event => open({ mode: 'usage' }, event.currentTarget)}><Plus size={18} aria-hidden="true"/> Registra utilizzo</button>}
       </header>
-      <div role="status">{notice === 'usage' && <p className={`access-notice ${styles.notice}`}>Utilizzo salvato.</p>}</div>
       {uses.length ? list(uses, 'usage') : <div className={`empty ${styles.empty}`}><Truck size={24} aria-hidden="true"/><strong>Nessun utilizzo registrato</strong></div>}
     </section>
     <section className={`panel ${styles.panel}`} id="interventi-veicolo" aria-labelledby={id + '-interventions'}>
@@ -94,7 +95,6 @@ export function VehicleLog({ entries, today, vehicleId, subjects, sites, editabl
         <div><h2 id={id + '-interventions'} ref={interventionHeading} tabIndex={-1}>Interventi di manutenzione</h2></div>
         {editable && <button type="button" className="button secondary" onClick={event => open({ mode: 'intervention' }, event.currentTarget)}><Plus size={18} aria-hidden="true"/> Nuovo intervento</button>}
       </header>
-      <div role="status">{notice === 'intervention' && <p className={`access-notice ${styles.notice}`}>Intervento salvato.</p>}</div>
       {interventions.length > 0 && <div className={`form-grid ${styles.filters}`}>
         <label htmlFor={id + '-kind'}>Tipo di intervento<select id={id + '-kind'} value={kindFilter} onChange={event => setKindFilter(event.target.value as typeof kindFilter)}>
           <option value="">Tutti i tipi</option>

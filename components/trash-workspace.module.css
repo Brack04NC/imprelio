@@ -9,8 +9,7 @@
 .description p { margin-block-start: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .restore { justify-self: start; }
 .empty { padding: 24px 16px; border-block-start: 1px solid var(--line); color: var(--muted); }
-.notice, .error { margin: 0 16px 12px; }
-.notice { padding: 9px 12px; border-radius: 8px; background: #e7f5ee; color: #176346; overflow-wrap: anywhere; }
+.error { margin: 0 16px 12px; }
 .pages { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 14px; color: var(--muted); border-block-start: 1px solid var(--line); }
 .pages div { display: flex; gap: 5px; }
 

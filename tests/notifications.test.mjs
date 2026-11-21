@@ -19,6 +19,21 @@ function workerDeadline(id, category, due_on, archived = false) {
   return { id, worker_id: 'worker', category, title: id, due_on, archived, workerName: 'Luca Ferretti' };
 }
 
+test('I dettagli lunghi restano anteprime salvabili nella cronologia senza troncare caratteri Unicode', () => {
+  const long = '🏗'.repeat(351);
+  const exact = '🏗'.repeat(350);
+  const operations = [
+    record('12', 'invoice', 'open', { due_date: today, party: long }),
+    record('13', 'order', 'confirmed', { expected_date: today, supplier: exact }),
+    record('14', 'article', 'active', { category: 'vehicles', revision_due_on: today, code: long }),
+  ];
+  const entries = buildNotifications({ ...sources, operations }, today);
+  assert.deepEqual(entries.map(entry => [entry.id, entry.detail]), [
+    ['invoice:12', '🏗'.repeat(349) + '…'], ['order:13', exact], ['vehicle-review:14', '🏗'.repeat(349) + '…'],
+  ]);
+  assert.equal(operations[0].fields.party, long);
+});
+
 test('L’Agenda segnala solo interventi aperti in ritardo, di oggi o entro sette giorni', () => {
   const agenda = [
     job('ottavo-giorno', '2026-11-28'), job('oggi', today, 'progress'), job('finito', today, 'done'),

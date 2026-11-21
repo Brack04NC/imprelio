@@ -96,8 +96,10 @@ async function readNotificationSources(db: Database, org: string, today: string,
 async function saveHistory(db: Database, org: string, entries: NotificationItem[]) {
   const unique = new Map(entries.map(item => [notificationOccurrenceKey(item), item]));
   const records = [...unique].map(([key, item]) => ({ key, item }));
-  for (let offset = 0; offset < records.length; offset += 200) {
-    const { error } = await db.rpc('imprelio_record_notifications', { org, reminders: records.slice(offset, offset + 200) });
+  // Even escaped text or multi-byte characters must fit the RPC's 300 KB limit.
+  const historyBatchSize = 50;
+  for (let offset = 0; offset < records.length; offset += historyBatchSize) {
+    const { error } = await db.rpc('imprelio_record_notifications', { org, reminders: records.slice(offset, offset + historyBatchSize) });
     if (error) throw error;
   }
 }

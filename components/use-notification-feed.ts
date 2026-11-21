@@ -6,7 +6,7 @@ import type { NotificationFeed } from '@/lib/notifications';
 
 export function useNotificationFeed(identity: Identity, { enabled, includeHistory = false }: { enabled: boolean; includeHistory?: boolean }) {
   const organization = identity.org.id;
-  const scope = organization + ':' + includeHistory;
+  const scope = JSON.stringify([organization, identity.email, identity.demo, includeHistory]);
   const [snapshot, setSnapshot] = useState<{ scope: string; feed: NotificationFeed } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -46,18 +46,27 @@ export function useNotificationFeed(identity: Identity, { enabled, includeHistor
 
   useEffect(() => {
     if (!enabled) return;
+    let active = true;
+    let day = romeDate();
     void refresh();
     async function storage(event: StorageEvent) {
       if (!identity.demo) return;
       const { notificationDemoStorageKeys } = await import('@/lib/notifications-demo');
-      if (notificationDemoStorageKeys.has(event.key)) void refresh();
+      if (active && notificationDemoStorageKeys.has(event.key)) void refresh();
     }
     function visible() {
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState !== 'visible') return;
+      day = romeDate();
+      void refresh();
     }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && romeDate() !== day) visible();
+    }, 30_000);
     window.addEventListener('storage', storage);
     document.addEventListener('visibilitychange', visible);
     return () => {
+      active = false;
+      window.clearInterval(timer);
       request.current?.abort();
       request.current = null;
       window.removeEventListener('storage', storage);

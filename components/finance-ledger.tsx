@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import { ArrowDownLeft, ArrowUpRight, Ban, Download, Landmark, Pencil, Plus, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { formatDate, type Identity } from '@/lib/domain';
@@ -200,7 +201,7 @@ export function FinanceLedger({ identity, initial, sites, today }: {
           <Plus size={18}/> Nuovo movimento</button>}
       </div>
     </header>
-    {notice && <p className="access-notice" role="status">{notice}</p>}
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     {account ? <>
       <section className={`panel form-grid ${styles.filters}`} aria-label="Periodo e conto">
         <div className={styles.accountSelect}>

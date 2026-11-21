@@ -1,18 +1,31 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import { actionSchema, jobKinds, jobLabels, jobStates, kindLabels, siteLabels, siteStates, type Action, type Client, type Job, type Site } from '@/lib/domain';
+
+function onBackdrop(event: MouseEvent<HTMLDialogElement>) {
+  if (event.target !== event.currentTarget) return false;
+  const { left, right, top, bottom } = event.currentTarget.getBoundingClientRect();
+  return event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom;
+}
 
 export function Drawer({ title, children, onClose, busy = false }: {
   title: string; children: ReactNode; onClose: () => void; busy?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const pressedBackdrop = useRef(false);
   const titleId = useId();
   useEffect(() => { dialog.current?.showModal(); }, []);
   return <dialog className="drawer" ref={dialog} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
-    onClick={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    onPointerDown={event => { pressedBackdrop.current = event.button === 0 && onBackdrop(event); }}
+    onPointerCancel={() => { pressedBackdrop.current = false; }}
+    onClick={event => {
+      const outside = pressedBackdrop.current && onBackdrop(event);
+      pressedBackdrop.current = false;
+      if (outside && !busy) onClose();
+    }}>
     <div className="drawer-inner">
       <header className="drawer-header"><h2 id={titleId}>{title}</h2><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Chiudi"><X size={22}/></button></header>
       {children}

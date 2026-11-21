@@ -61,8 +61,9 @@ export type Action = z.infer<typeof actionSchema>;
 
 export const PAGE_SIZE = 6;
 
+const romeDayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function romeDate(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  return romeDayFormatter.format(now);
 }
 
 export function plusDays(date: string, days: number) {

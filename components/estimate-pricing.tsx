@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, Check, ClipboardList, FileUp, FolderOpen, HardHat, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
@@ -421,7 +422,7 @@ export function EstimatePricing({ identity, initial, sites, clients, today, requ
         setSavedDraft(null); setPage(1); setDraftFilter('all'); setFocusedRow(null); setError('');
       }}>Prova l’esempio da 1.900 m²</button>}
       {progress && <p role="status" className={styles.notice}>{progress}</p>}
-      {notice && <p role="status" className={styles.notice}>{notice}</p>}
+      <StatusToast text={notice} onClose={() => setNotice('')}/>
       {error && <p role="alert" className="form-error">{error}</p>}
       <EstimatePdfArchive identity={identity} archive={archive} sites={availableSites}
         requestedPdf={requestedSite && !stableSite ? undefined : requestedPdf}/>

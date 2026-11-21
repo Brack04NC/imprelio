@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Archive, ArrowLeft, BadgeCheck, CalendarDays, Pencil, Plus, RotateCcw, Stethoscope, Trash2 } from 'lucide-react';
@@ -184,7 +185,7 @@ export function WorkerDeadlines({ identity, today: initialToday, worker, initial
       {canEdit && <button type="button" className="button primary" onClick={() => open({ mode: 'save' })}><Plus size={18}/> Nuova scadenza</button>}
     </div>
     {storageError && <p className="form-error" role="alert">Impossibile leggere le scadenze della demo.</p>}
-    <div role="status">{notice && <p className="access-notice">{notice}</p>}</div>
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     {currentWorker ? <>
       {currentWorker.archived && <p className={styles.readOnly}>Il profilo è archiviato. Puoi consultare le scadenze e lo storico.</p>}
       <section className={`panel ${styles.panel}`} aria-labelledby="active-deadlines-title">

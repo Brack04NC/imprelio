@@ -53,6 +53,14 @@ function activityDate(timestamp: string) {
   return Number.isFinite(date.getTime()) ? romeDate(date) : null;
 }
 
+// Operation fields accept up to 2,000 characters. The notification is a preview
+// and its persisted detail supports 350 PostgreSQL characters (Unicode points).
+function detailPreview(value: string) {
+  if (value.length <= 350) return value;
+  const characters = Array.from(value);
+  return characters.length <= 350 ? value : characters.slice(0, 349).join('') + '…';
+}
+
 function path(url: string, params: Record<string, string>) {
   return url + '?' + new URLSearchParams(params);
 }
@@ -93,7 +101,7 @@ export function buildNotifications(sources: NotificationSources, today: string, 
         if (!isDate(date) || (past ? !record.archived || date > today : date > deadlineUntil)) continue;
         entries.push({
           id: `${id}:${record.id}`, category: 'vehicles', priority: past ? 'info' : urgency(date), date,
-          title: `${label} · ${record.title}`, detail: record.fields.code || 'Veicolo',
+          title: `${label} · ${record.title}`, detail: detailPreview(record.fields.code || 'Veicolo'),
           status: past ? 'Veicolo archiviato' : date < today ? 'Scaduta' : date === today ? 'Scade oggi' : 'In scadenza',
           href: path('/gestione/magazzino', { veicolo: record.id }), actionLabel: 'Apri veicolo',
         });
@@ -116,7 +124,7 @@ export function buildNotifications(sources: NotificationSources, today: string, 
       if (!isDate(date) || (!past && date > deadlineUntil)) continue;
       entries.push({
         id: `invoice:${record.id}`, category: 'deadlines', priority: past ? 'info' : urgency(date), date,
-        title: `Fattura ${record.title}`, detail: record.fields.party || 'Scadenza di pagamento',
+        title: `Fattura ${record.title}`, detail: detailPreview(record.fields.party || 'Scadenza di pagamento'),
         status: past ? record.status === 'paid' ? 'Saldata' : 'Archiviata' : date < today ? 'Scaduta' : date === today ? 'Scade oggi' : 'In scadenza',
         href: path('/gestione/amministrazione', { tipo: record.kind, scheda: record.id }), actionLabel: 'Apri fattura',
       });
@@ -127,7 +135,7 @@ export function buildNotifications(sources: NotificationSources, today: string, 
       if (!isDate(date) || (!past && date > deadlineUntil)) continue;
       entries.push({
         id: `order:${record.id}`, category: 'deadlines', priority: past ? 'info' : urgency(date), date,
-        title: `Ordine ${record.title}`, detail: record.fields.supplier || 'Consegna',
+        title: `Ordine ${record.title}`, detail: detailPreview(record.fields.supplier || 'Consegna'),
         status: past ? (record.status === 'delivered' ? 'Consegnato' : record.status === 'cancelled' ? 'Annullato' : 'Archiviato')
           : date < today ? 'Consegna in ritardo' : date === today ? 'Consegna oggi' : 'Consegna prevista',
         href: path('/gestione/amministrazione', { tipo: record.kind, scheda: record.id }), actionLabel: 'Apri ordine',

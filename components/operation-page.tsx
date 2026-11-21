@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -82,7 +83,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
   const selectedHeading = useRef<HTMLHeadingElement>(null);
   const selectedRevealed = useRef(false);
   const linkedEditorOpened = useRef(false);
-  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const listHeading = useRef<HTMLHeadingElement>(null);
   const inFlight = useRef(false);
   const definition = operationDefinition(kind);
   const AreaIcon = areaIcons[area];
@@ -148,12 +149,10 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     }
     requestAnimationFrame(() => focusBack.current?.isConnected && focusBack.current.focus());
   }
-  function focusNotice() {
-    requestAnimationFrame(() => noticeRef.current?.focus());
-  }
 
   async function persist(input: OperationWrite) {
     if (inFlight.current) return;
+    const opener = editor ? focusBack.current : document.activeElement;
     inFlight.current = true; setBusy(true); setNotice(undefined);
     try {
       const action = validateOperation(input);
@@ -195,14 +194,16 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
       setNotice({ text: action.action === 'archive' ? 'Scheda archiviata.' : action.action === 'restore' ? 'Scheda ripristinata.' : 'Scheda salvata.' });
       if (editor) setEditor(null);
       if (returnToVehicle) router.replace(vehicleHref(identity, linkedId));
-      else focusNotice();
+      else requestAnimationFrame(() => {
+        if (opener instanceof HTMLElement && opener !== document.body && opener.isConnected) opener.focus({ preventScroll: true });
+        else listHeading.current?.focus();
+      });
     } finally { inFlight.current = false; setBusy(false); }
   }
 
   function toggleArchive(record: OperationRecord) {
     void persist({ action: record.archived ? 'restore' : 'archive', id: record.id, kind: record.kind }).catch(error => {
       setNotice({ text: error instanceof Error ? error.message : 'Operazione non riuscita.', error: true });
-      focusNotice();
     });
   }
 
@@ -320,7 +321,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
     </div>}
 
     <section className={styles.list} aria-labelledby="operation-list-heading">
-      <div className={styles.listHeading}><div><h2 id="operation-list-heading">{fleetView ? 'Veicoli' : kind === 'estimate' ? 'Elenco computi' : definition.plural}</h2>
+      <div className={styles.listHeading}><div><h2 id="operation-list-heading" ref={listHeading} tabIndex={-1}>{fleetView ? 'Veicoli' : kind === 'estimate' ? 'Elenco computi' : definition.plural}</h2>
         {kind !== 'estimate' && <p>{fleetView ? 'Consulta i mezzi aziendali, le scadenze e lo storico di utilizzo.' : definition.description}</p>}</div>
         <div className={styles.listActions}>
           {kind === 'estimate' && <button className="button primary" disabled={busy} onClick={openCreate}>
@@ -343,7 +344,7 @@ export function OperationPage({ identity, area, today: initialToday, initial, si
         <span>Veicolo selezionato <strong>{linkedVehicle.title}</strong></span>
         <button type="button" className="button text-button" onClick={() => { setVehicleFilter(''); setPage(1); }}>Mostra tutti i veicoli</button>
       </div>}
-      {notice && <p ref={noticeRef} tabIndex={-1} role={notice.error ? 'alert' : 'status'} className={notice.error ? 'form-error' : styles.notice}>{notice.text}</p>}
+      <StatusToast text={notice?.text} error={notice?.error} onClose={() => setNotice(undefined)}/>
       {recordsReady && requestedRecord && !linkedRecord && !archive && kind === (requestedKind ?? kinds[0]) &&
         <p role="status" className={styles.linkedVehicle}>La scheda collegata non è più disponibile tra le schede attive.</p>}
       {shown.length > 0 ? <ul className={styles.cards} role="list">{shown.map(record => {

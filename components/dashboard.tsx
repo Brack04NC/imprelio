@@ -15,6 +15,7 @@ import { OperationLinks } from './operation-links';
 import { AgendaRow, interventionActions, interventionMenuLabel, interventionName, jobIcons } from './agenda-row';
 import { ContextActions } from './context-actions';
 import { useTrashRemoval } from '@/components/trash-removal';
+import { StatusToast } from './feedback-toast';
 import styles from './dashboard.module.css';
 
 type EditorState = { type: 'site'; site?: Site; clientId?: string } | { type: 'job'; site: Pick<Site, 'id' | 'name'>; job?: Job };
@@ -131,13 +132,6 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
     }, filters.q ? 180 : 0);
     return () => { controller.abort(); window.clearTimeout(timeout); };
   }, [filters, identity.org.id, identity.demo, today, revision]);
-
-  useEffect(() => {
-    if (notice && !notice.error) {
-      const timeout = window.setTimeout(() => setNotice(null), 3500);
-      return () => window.clearTimeout(timeout);
-    }
-  }, [notice]);
 
   function makeUrl(path: string, updates: Record<string, string | null> = {}) {
     const next = new URLSearchParams(window.location.search);
@@ -398,7 +392,7 @@ export function Dashboard({ identity, initial, today }: { identity: Identity; in
       onDelete={editedJob && editor.type === 'job' ? () => removeIntervention(editedJob, editor.site.name, restoreFocus.current) : undefined}/>}
     {trash.feedback}
     {siteTrash.feedback}
-    {notice && <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.error ? <CircleAlert size={19}/> : <Check size={19}/>} {notice.text}<button className="icon-button" onClick={() => setNotice(null)} aria-label="Chiudi avviso"><X size={17}/></button></div>}
+    <StatusToast text={notice?.text} error={notice?.error} onClose={() => setNotice(null)}/>
   </Shell>;
 }
 

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import {
   ArrowRight, Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight,
-  Clock3, FileCheck2, Info, RefreshCw, TriangleAlert, Truck, Users,
+  Clock3, FileCheck2, Info, RefreshCw, Truck, Users,
 } from 'lucide-react';
 import { formatDate, type Identity } from '@/lib/domain';
 import {
@@ -12,6 +12,8 @@ import {
   type NotificationCategory, type NotificationItem, type NotificationPriority,
 } from '@/lib/notifications';
 import { orgLink } from './shell';
+import { notificationPriorities } from './notification-priority';
+import tones from './notice-tones.module.css';
 import styles from './notification-center.module.css';
 
 const categories = {
@@ -22,12 +24,7 @@ const categories = {
   vehicles: { label: 'Veicoli', icon: Truck },
 } satisfies Record<NotificationCategory, { label: string; icon: typeof Bell }>;
 
-const priorityOptions = [
-  { id: 'all', label: 'Tutte', badge: '', icon: Bell },
-  { id: 'urgent', label: 'Urgenti', badge: 'Urgente', icon: TriangleAlert },
-  { id: 'soon', label: 'Da seguire', badge: 'Da seguire', icon: Clock3 },
-  { id: 'info', label: 'Informative', badge: 'Informativa', icon: Info },
-] as const;
+const priorityOrder = ['all', 'urgent', 'soon', 'info'] as const;
 const dateOptions = { day: 'numeric', month: 'short', year: 'numeric' } as const;
 const categoryList = new Intl.ListFormat('it', { style: 'long', type: 'conjunction' });
 const pageSize = 12;
@@ -56,6 +53,13 @@ export function NotificationCenter({ identity, items, unavailable, onRefresh, re
   const activePage = Math.min(page, pageCount);
   const visible = filtered.slice((activePage - 1) * pageSize, activePage * pageSize);
   const hasFilters = category !== 'all' || priority !== 'all';
+  const incomplete = Boolean(error || (history && historyUnavailable) ||
+    (category === 'all' ? unavailable.length > 0 : unavailable.includes(category)));
+  const unknownTotal = incomplete || (refreshing && !items.length);
+  const countText = filtered.length === 1 ? '1 notifica' : `${filtered.length} notifiche`;
+  const resultText = !filtered.length && unknownTotal ? (refreshing ? 'Aggiornamento in corso' : 'Conteggio non disponibile')
+    : countText + (incomplete ? (filtered.length === 1 ? ' visibile' : ' visibili') : '');
+  const EmptyIcon = incomplete ? Info : BellOff;
 
   function changePage(next: number) {
     setPage(next);
@@ -81,33 +85,35 @@ export function NotificationCenter({ identity, items, unavailable, onRefresh, re
     </nav>
 
     {error && <p className="form-error" role="alert">{error} Usa Aggiorna per riprovare.</p>}
-    {history && historyUnavailable && <aside role="status" className={styles.unavailable}>
+    {history && historyUnavailable && <aside role="status" className={`${styles.unavailable} ${tones.warning}`}>
       <Info size={18} aria-hidden="true"/>
       <p>{identity.demo ? 'Cronologia salvata nel browser non disponibile.' : 'Cronologia salvata non disponibile. In Supabase la attiva la migrazione 015.'}</p>
     </aside>}
 
-    {unavailable.length > 0 && <aside role="status" className={styles.unavailable}>
+    {unavailable.length > 0 && <aside role="status" className={`${styles.unavailable} ${tones.warning}`}>
       <Info size={18} aria-hidden="true"/>
       <p><strong>Aggiornamento parziale.</strong> Alcuni avvisi potrebbero mancare in {categoryList.format(unavailable.map(key => categories[key].label))}.</p>
     </aside>}
 
     <fieldset className={styles.priorities}>
       <legend className="sr-only">Filtra per priorità</legend>
-      {priorityOptions.map(({ id, label, icon: Icon }) =>
-        <button type="button" key={id} className={styles.priorityCard} data-priority={id}
+      {priorityOrder.map(id => {
+        const { label, icon: Icon, tone } = notificationPriorities[id];
+        return <button type="button" key={id} className={`${styles.priorityCard} ${tone}`} data-priority={id}
           aria-pressed={priority === id} aria-controls="notifiche-risultati"
           onClick={() => { setPriority(id); setPage(1); }}>
           <span className={styles.priorityIcon}><Icon size={19} aria-hidden="true"/></span>
-          <span className={styles.priorityCount}><small>{label}</small><strong>{counts[id]}</strong></span>
+          <span className={styles.priorityCount}><small>{label}</small><strong>{unknownTotal && !counts[id] ? '—' : counts[id]}</strong></span>
           {priority === id && <Check size={15} className={styles.selected} aria-hidden="true"/>}
-        </button>)}
+        </button>;
+      })}
     </fieldset>
 
     <section className="panel" id="notifiche-risultati" aria-labelledby="notifiche-elenco">
       <header className={`panel-header ${styles.toolbar}`}>
         <div>
           <h2 id="notifiche-elenco" tabIndex={-1} ref={listHeading}>{history ? 'Tutti gli avvisi' : 'Avvisi'}</h2>
-          <p role="status" aria-atomic="true">{filtered.length} {filtered.length === 1 ? 'notifica' : 'notifiche'}</p>
+          <p role="status" aria-atomic="true">{resultText}</p>
         </div>
         <div className={styles.categoryFilter}>
           <label htmlFor="notifiche-categoria">Categoria</label>
@@ -123,8 +129,9 @@ export function NotificationCenter({ identity, items, unavailable, onRefresh, re
 
       {visible.length > 0 ? <ul className={styles.list} role="list">{visible.map(item => <NotificationRow key={item.id} item={item} identity={identity}/>)}</ul>
         : <div className={`empty ${styles.empty}`}>
-          <span className={styles.emptyIcon}><BellOff size={22} aria-hidden="true"/></span>
-          <strong>{refreshing ? 'Caricamento avvisi…' : hasFilters ? 'Nessun avviso per questi filtri' : 'Nessun avviso da mostrare'}</strong>
+          <span className={styles.emptyIcon}><EmptyIcon size={22} aria-hidden="true"/></span>
+          <strong>{refreshing ? 'Caricamento avvisi…' : incomplete ? 'Elenco degli avvisi incompleto' :
+            hasFilters ? 'Nessun avviso per questi filtri' : 'Nessun avviso da mostrare'}</strong>
           {hasFilters && <button type="button" className="button secondary" onClick={() => {
             setCategory('all'); setPriority('all'); changePage(1);
           }}>Azzera i filtri</button>}
@@ -145,12 +152,12 @@ export function NotificationCenter({ identity, items, unavailable, onRefresh, re
 
 function NotificationRow({ item, identity }: { item: NotificationItem; identity: Identity }) {
   const { label: category, icon: Icon } = categories[item.category];
-  const { badge } = priorityOptions.find(option => option.id === item.priority)!;
-  return <li className={styles.row} data-priority={item.priority}>
+  const { badge, icon: PriorityIcon, tone } = notificationPriorities[item.priority];
+  return <li className={`${styles.row} ${tone}`} data-priority={item.priority}>
     <span className={styles.rowIcon}><Icon size={20} aria-hidden="true"/></span>
     <div className={styles.rowBody}>
       <div className={styles.summary}>
-        <span className={styles.priorityBadge}><i aria-hidden="true"/>{badge}</span>
+        <span className={styles.priorityBadge}><PriorityIcon size={13} aria-hidden="true"/>{badge}</span>
         <span>{category}</span>
         {item.past && <span className={styles.past}>Passata</span>}
       </div>

@@ -3,7 +3,6 @@
 .header > div { flex: 1 1 215px; min-width: 0; }
 .panel .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 19px 14px; }
 .filters label, .formPair label { min-width: 0; }
-.notice { margin: 0 19px 12px; }
 .records { margin: 0; padding: 0; list-style: none; }
 .record {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start;
@@ -24,7 +23,6 @@
 
 @media (max-width: 680px) {
   .panel .filters { padding-inline: 15px; }
-  .notice { margin-inline: 15px; }
   .record { grid-template-columns: auto minmax(0, 1fr); padding-inline: 15px; gap: 9px; }
   .edit { grid-column: 2; justify-self: start; }
 }

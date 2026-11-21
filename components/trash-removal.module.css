@@ -16,32 +16,3 @@
 .actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .actions button[type=submit] { color: white; background: #9a2a26; }
 .actions button[type=submit]:hover { background: #7f201c; }
-
-.notifications, .host {
-  position: fixed;
-  z-index: 10;
-  inset-inline-end: 18px;
-  inset-block-end: max(18px, env(safe-area-inset-bottom));
-  width: min(390px, calc(100% - 36px));
-  display: grid;
-  gap: 8px;
-  pointer-events: none;
-}
-.host:empty { display: none; }
-.host .notifications { position: static; width: auto; }
-
-.toast {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 5px 20px #182f5225;
-  background: var(--surface);
-  pointer-events: auto;
-}
-
-.toast small { display: block; margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
-.toast p { grid-column: 1 / -1; }

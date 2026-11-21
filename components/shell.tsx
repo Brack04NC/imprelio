@@ -1,14 +1,15 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
-import { Archive, Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronRight, HardHat, LayoutDashboard, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight } from 'lucide-react';
+import Link, { useLinkStatus } from 'next/link';
+import { Archive, Bell, Building2, CalendarCheck, CalendarDays, Calculator, ChartNoAxesCombined, ChevronDown, ChevronLeft, ChevronRight, HardHat, Hourglass, LayoutDashboard, Menu, Search, ShieldCheck, Trash2, X, LogOut, Users, BriefcaseBusiness, FileText, FileUp, Wallet, Warehouse, PanelTop, ArrowUpRight, type LucideIcon } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { Identity } from '@/lib/domain';
 import { areas } from '@/lib/operation-types';
 import { NotificationBell } from './notification-bell';
-import trashStyles from './trash-removal.module.css';
+import { FeedbackHost } from './feedback-toast';
 
 const modules = [
   { section: 'clienti', label: 'Clienti', href: '/clienti', icon: Building2 },
@@ -24,6 +25,22 @@ const modules = [
   { section: 'cestino', label: 'Cestino', href: '/gestione/cestino', icon: Trash2 },
 ] as const;
 type ShellSection = 'dashboard' | 'cantieri' | 'agenda' | 'notifiche' | 'accessi' | typeof modules[number]['section'];
+
+function NavigationHint({ label }: { label: string }) {
+  const { pending } = useLinkStatus();
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!pending) { setVisible(false); return; }
+    const timer = window.setTimeout(() => setVisible(true), 180);
+    return () => window.clearTimeout(timer);
+  }, [pending]);
+  if (!pending || !visible) return null;
+  const host = document.getElementById('navigation-status');
+  return <>
+    <Hourglass size={17} className="nav-pending-icon" aria-hidden="true"/>
+    {host && createPortal(<span className="nav-progress"><Hourglass size={16} aria-hidden="true"/> Apertura {label}…</span>, host)}
+  </>;
+}
 
 export function orgLink(path: string, identity: Identity) {
   if (identity.orgs.length < 2) return path;
@@ -74,28 +91,31 @@ export function Shell({ identity, section, detail, onSearch, children }: {
   const agenda = orgLink('/agenda', identity);
   const notifications = orgLink('/notifiche', identity);
   const access = orgLink('/accessi', identity);
+  const sectionModule = modules.find(item => item.section === section);
+  const parentHref = section === 'cantieri' ? overview : section === 'agenda' ? agenda : sectionModule && orgLink(sectionModule.href, identity);
   const sectionLabel = section === 'dashboard' ? 'Dashboard' : section === 'cantieri' ? 'Cantieri' : section === 'agenda' ? 'Agenda'
-    : section === 'notifiche' ? 'Notifiche' : section === 'accessi' ? 'Gestione accessi' : modules.find(item => item.section === section)?.label;
+    : section === 'notifiche' ? 'Notifiche' : section === 'accessi' ? 'Gestione accessi' : sectionModule?.label;
+  function navLink(page: ShellSection, label: string, href: string, Icon: LucideIcon) {
+    return <Link key={page} href={href} prefetch={false} onNavigate={() => mobile.current?.close()}
+      aria-current={section === page ? 'page' : undefined} className={'nav-link ' + (section === page ? 'nav-active' : '')}>
+      <Icon size={18} aria-hidden="true"/> {label}<NavigationHint label={label}/>
+    </Link>;
+  }
   function sidebar() {
     return <>
-      <Link href={home} prefetch={false} className="brand" onClick={() => mobile.current?.close()}>
+      <Link href={home} prefetch={false} className="brand" onNavigate={() => mobile.current?.close()}>
         <Image src="/brand/imprelio-simbolo-originale.png" alt="" width={44} height={44} className="brand-icon" unoptimized/>
         <span>Imprelio<small>Gestione cantieri</small></span>
       </Link>
       <nav className="nav-main" aria-label="Menu principale">
         <p className="nav-label">OPERATIVITÀ</p>
-        <Link href={home} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'dashboard' ? 'page' : undefined}
-          className={'nav-link ' + (section === 'dashboard' ? 'nav-active' : '')}><LayoutDashboard size={19} aria-hidden="true"/> Dashboard</Link>
-        <Link href={overview} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'cantieri' ? 'page' : undefined} className={'nav-link ' + (section === 'cantieri' ? 'nav-active' : '')}><HardHat size={19} /> Cantieri</Link>
-        <Link href={agenda} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'agenda' ? 'page' : undefined}
-          className={'nav-link ' + (section === 'agenda' ? 'nav-active' : '')}><CalendarDays size={18} /> Agenda</Link>
-        <Link href={notifications} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'notifiche' ? 'page' : undefined}
-          className={'nav-link ' + (section === 'notifiche' ? 'nav-active' : '')}><Bell size={18} aria-hidden="true"/> Notifiche</Link>
-        {identity.org.role === 'admin' && <Link href={access} prefetch={false} onClick={() => mobile.current?.close()} aria-current={section === 'accessi' ? 'page' : undefined} className={'nav-link ' + (section === 'accessi' ? 'nav-active' : '')}><ShieldCheck size={18} /> Gestione accessi</Link>}
+        {navLink('dashboard', 'Dashboard', home, LayoutDashboard)}
+        {navLink('cantieri', 'Cantieri', overview, HardHat)}
+        {navLink('agenda', 'Agenda', agenda, CalendarDays)}
+        {navLink('notifiche', 'Notifiche', notifications, Bell)}
+        {identity.org.role === 'admin' && navLink('accessi', 'Gestione accessi', access, ShieldCheck)}
         <p className="nav-label roadmap-label">GESTIONE</p>
-        {modules.map(({ section: page, label, href, icon: Icon }) => <Link key={page} href={orgLink(href, identity)} prefetch={false}
-          onClick={() => mobile.current?.close()} aria-current={section === page ? 'page' : undefined}
-          className={'nav-link ' + (section === page ? 'nav-active' : '')}><Icon size={18}/> {label}</Link>)}
+        {modules.map(item => navLink(item.section, item.label, orgLink(item.href, identity), item.icon))}
       </nav>
       <div className="sidebar-footer">
         <div className="org-icon"><BriefcaseBusiness size={17} /></div>
@@ -104,6 +124,7 @@ export function Shell({ identity, section, detail, onSearch, children }: {
     </>;
   }
   return <div className="app-shell">
+    <div id="navigation-status" role="status" aria-atomic="true"/>
     <a className="skip" href="#contenuto">Vai al contenuto</a>
     <aside ref={desktopNav} className="sidebar">{sidebar()}</aside>
     <dialog ref={mobile} className="mobile-nav" aria-label="Navigazione" onClick={event => {
@@ -120,8 +141,10 @@ export function Shell({ identity, section, detail, onSearch, children }: {
           <button className="icon-button menu-trigger" onClick={() => mobile.current?.showModal()} aria-haspopup="dialog" aria-label="Apri menu"><Menu size={21}/></button>
           <PanelTop size={16} className="breadcrumb-icon" aria-hidden="true"/>
           <span className="breadcrumb-root">Area di lavoro</span><ChevronRight size={14} className="breadcrumb-root" />
-          {detail && section === 'cantieri' ? <Link href={overview} prefetch={false}>Cantieri</Link> : <strong>{sectionLabel}</strong>}
-          {detail && <><ChevronRight size={14}/><strong className="breadcrumb-detail">{detail}</strong></>}
+          {detail && parentHref ? <Link href={parentHref} prefetch={false} className="breadcrumb-parent">
+            <ChevronLeft size={14} className="breadcrumb-back" aria-hidden="true"/><span>{sectionLabel}</span>
+          </Link> : <strong>{sectionLabel}</strong>}
+          {detail && <><ChevronRight size={14} className="breadcrumb-separator" aria-hidden="true"/><strong className="breadcrumb-detail">{detail}</strong></>}
         </div>
         <div className="top-actions">
           <Link ref={searchLink} prefetch={false} className="global-search" aria-keyshortcuts="Control+K Meta+K" href={orgLink('/cantieri?cerca=1', identity)} onClick={event => {
@@ -148,7 +171,7 @@ export function Shell({ identity, section, detail, onSearch, children }: {
         </div>
       </header>
       <main id="contenuto" tabIndex={-1} className="content">{children}</main>
-      <div className={trashStyles.host} id="trash-notifications"/>
+      <FeedbackHost/>
     </div>
   </div>;
 }

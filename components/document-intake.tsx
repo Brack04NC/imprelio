@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import { ArrowUpRight, ChevronLeft, ChevronRight, FileImage, FileText, FolderOpen, Search, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { blankDocumentFields, documentExtractionSchema, documentFieldLimits, documentKindLabels, documentKinds,
@@ -14,6 +15,7 @@ import { demoSiteOptions } from '@/lib/operations-demo';
 import { demoTrashKey } from '@/lib/trash-storage';
 import type { TrashAction } from '@/lib/trash';
 import { Drawer } from './editor';
+import { ContextActions, type ContextAction } from './context-actions';
 import { Shell } from './shell';
 import { useTrashRemoval } from './trash-removal';
 import styles from './document-intake.module.css';
@@ -58,7 +60,9 @@ function ExtractedStatus({ status }: { status: DocumentExtraction['status'] }) {
   return <span className={styles.status} data-status={status}>{statusLabels[status]}</span>;
 }
 
-function OpenOriginal({ entry, identity }: { entry: DocumentEntry; identity: Identity }) {
+function OpenOriginal({ entry, identity, controlRef }: { entry: DocumentEntry; identity: Identity;
+  controlRef?: (element: HTMLAnchorElement | HTMLButtonElement | null) => void;
+}) {
   const [error, setError] = useState('');
   const label = `Apri file ${entry.file_name}`;
   const content = <><DocumentIcon pdf={entry.mime_type === 'application/pdf'}/><span>Apri file</span><ArrowUpRight className={styles.external} size={14} aria-hidden="true"/></>;
@@ -79,24 +83,31 @@ function OpenOriginal({ entry, identity }: { entry: DocumentEntry; identity: Ide
   }
 
   return <div className={styles.openOriginal}>
-    {identity.demo ? <button type="button" className={`button secondary ${styles.openFile}`} aria-label={label} onClick={open}>{content}</button>
-      : <a className={`button secondary ${styles.openFile}`} href={documentOpenHref(identity.org.id, entry)} target="_blank"
+    {identity.demo ? <button ref={controlRef} type="button" className={`button secondary ${styles.openFile}`} aria-label={label} onClick={open}>{content}</button>
+      : <a ref={controlRef} className={`button secondary ${styles.openFile}`} href={documentOpenHref(identity.org.id, entry)} target="_blank"
         rel="noopener noreferrer" aria-label={label} onClick={event => { if (event.detail > 1) event.preventDefault(); }}>{content}</a>}
     {error && <p className={styles.fileError} role="alert">{error}</p>}
   </div>;
 }
 
 function DocumentRow({ entry, identity, site, showDetails, remove }: { entry: DocumentEntry; identity: Identity; site?: SiteOption;
-  showDetails: (entry: DocumentEntry, trigger: HTMLButtonElement) => void;
-  remove: (entry: DocumentEntry, trigger: HTMLButtonElement) => void;
+  showDetails: (entry: DocumentEntry, trigger: HTMLElement | null) => void;
+  remove: (entry: DocumentEntry, trigger: HTMLElement | null) => void;
 }) {
+  const original = useRef<HTMLAnchorElement | HTMLButtonElement | null>(null);
+  const activeTrigger = () => document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const actions: ContextAction[] = [
+    { label: 'Dati del documento', icon: FileText, onSelect: () => showDetails(entry, activeTrigger()) },
+    { label: 'Apri file originale', icon: ArrowUpRight, onSelect: () => original.current?.click() },
+    { label: 'Elimina documento', icon: Trash2, tone: 'danger', onSelect: () => remove(entry, activeTrigger()) },
+  ];
   const { fields, status } = entry.extraction;
   const subtitle = [fields.number && `N. ${fields.number}`, site?.name, fields.title !== entry.file_name && fields.title && entry.file_name]
     .filter(Boolean).join(' · ');
-  return <li className={styles.row}>
+  return <ContextActions label={documentTitle(entry)} actions={actions} compact>{({ surface, trigger }) => <li {...surface} className={styles.row}>
     <div className={styles.documentCell}>
       <div className={styles.tags}><span className={styles.category}>{documentKindLabels[entry.kind]}</span><ExtractedStatus status={status}/></div>
-      <button type="button" className={styles.documentName} aria-haspopup="dialog" onClick={event => showDetails(entry, event.currentTarget)}>
+      <button type="button" data-context-primary="" className={styles.documentName} aria-haspopup="dialog" onClick={event => showDetails(entry, event.currentTarget)}>
         {documentTitle(entry)}<ChevronRight size={16} aria-hidden="true"/>
       </button>
       {subtitle && <small>{subtitle}</small>}
@@ -111,13 +122,14 @@ function DocumentRow({ entry, identity, site, showDetails, remove }: { entry: Do
     </div>
     <div className={styles.totalCell}><span className={styles.cellLabel}>Totale</span><strong>{formatTotal(fields) || '—'}</strong></div>
     <div className={styles.rowActions}>
-      <OpenOriginal identity={identity} entry={entry}/>
+      <OpenOriginal identity={identity} entry={entry} controlRef={element => { original.current = element; }}/>
       <button type="button" className={`icon-button ${styles.remove}`} aria-label={`Elimina ${entry.file_name}`}
         title="Elimina" aria-haspopup="dialog" onClick={event => remove(entry, event.currentTarget)}>
         <Trash2 size={17} aria-hidden="true"/>
       </button>
+      {trigger}
     </div>
-  </li>;
+  </li>}</ContextActions>;
 }
 
 function DocumentDetails({ entry, identity, site, onClose }: { entry: DocumentEntry; identity: Identity; site?: SiteOption; onClose: () => void }) {
@@ -167,7 +179,7 @@ export function DocumentIntake({ identity, sites, initialKind, initialSite, init
   const [editorError, setEditorError] = useState('');
   const extractionController = useRef<AbortController | null>(null);
   const uploadButton = useRef<HTMLButtonElement>(null);
-  const detailsTrigger = useRef<HTMLButtonElement | null>(null);
+  const detailsTrigger = useRef<HTMLElement | null>(null);
   const listHeading = useRef<HTMLHeadingElement>(null);
   const inFlight = useRef(false);
   const pendingImport = useRef(initialImport && !identity.demo);
@@ -243,7 +255,7 @@ export function DocumentIntake({ identity, sites, initialKind, initialSite, init
     requestAnimationFrame(() => { if (document.activeElement === document.body) listHeading.current?.focus(); });
   }
 
-  function remove(entry: DocumentEntry, trigger: HTMLButtonElement) {
+  function remove(entry: DocumentEntry, trigger: HTMLElement | null) {
     const trash = entry.source === 'estimate-pdf' ? estimateTrash : importedTrash;
     trash.request(entry.id, entry.file_name, trigger);
   }
@@ -259,6 +271,7 @@ export function DocumentIntake({ identity, sites, initialKind, initialSite, init
     extractionController.current = controller;
     const id = crypto.randomUUID();
     const site = draft?.site ?? (initialSite && siteById.has(initialSite) ? initialSite : '');
+    setNotice('');
     setEditorError('');
     setProgress('Preparazione del file…');
     setDraft({ id, file, site, extraction: null });
@@ -327,7 +340,7 @@ export function DocumentIntake({ identity, sites, initialKind, initialSite, init
         <Upload size={17} aria-hidden="true"/> Importa documento
       </button>
     </section>
-    <div role="status">{notice && <p className="access-notice">{notice}</p>}</div>
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     <section className="panel" aria-labelledby="document-list-heading">
       <header className="panel-header"><div><h2 id="document-list-heading" ref={listHeading} tabIndex={-1}>Documenti salvati</h2>
         {!loading && !listError && <p>{entries.length} {entries.length === 1 ? 'documento' : 'documenti'}</p>}

@@ -16,6 +16,7 @@ import { CalendarPanel } from './calendar-panel';
 import { Editor } from './editor';
 import { Shell, orgLink } from './shell';
 import { useTrashRemoval } from '@/components/trash-removal';
+import { StatusToast } from './feedback-toast';
 
 type SiteChoice = Pick<Site, 'id' | 'name' | 'city'>;
 type Editing = AgendaItem | { date: string; time?: string };
@@ -169,6 +170,6 @@ export function AgendaPage({ identity, today, view, calendar, items, sites }: {
       today={'date' in editing ? editing.date : selectedDay} defaultTime={'date' in editing ? editing.time : undefined}
       clients={[]} onClose={closeEditor} save={save} onDelete={editedJob ? () => removeIntervention(editedJob, opener.current) : undefined}/>}
     {trash.feedback}
-    {notice && <div className="toast" role="status">{notice}<button type="button" className="button text-button" onClick={() => setNotice('')}>Chiudi</button></div>}
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
   </Shell>;
 }

@@ -1,0 +1,25 @@
+.danger {
+  --notice-accent: #9f241f;
+  --notice-tint: #fff1ee;
+  --notice-line: #e8b0a8;
+}
+.warning {
+  --notice-accent: #884408;
+  --notice-tint: #fff5e5;
+  --notice-line: #e8c18b;
+}
+.info {
+  --notice-accent: #204a94;
+  --notice-tint: #edf3ff;
+  --notice-line: #b3c8ed;
+}
+.success {
+  --notice-accent: #146044;
+  --notice-tint: #ebf7ef;
+  --notice-line: #a6d5ba;
+}
+.neutral {
+  --notice-accent: #41546e;
+  --notice-tint: #f0f3f8;
+  --notice-line: #c0cbda;
+}

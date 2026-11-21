@@ -28,9 +28,7 @@ La revisione grafica ha confrontato navigazione, gerarchia dei titoli, azioni pr
 
 ## Stato del database online
 
-Il confronto in sola lettura del 21 novembre sul progetto Imprelio ha restituito **SCHEMA_DA_VERIFICARE** rispetto alla migrazione **202611180019**. Su 446 firme confrontate, 44 differiscono o sono assenti. Le differenze riguardano l’archivio delle importazioni e il suo collegamento al cestino. Un confronto separato con le migrazioni dalla 001 alla 016 e l’impostazione RLS della 018 ha restituito **OK**. Il registro della CLI è assente, perciò l’elenco delle migrazioni della CLI da solo sarebbe insufficiente.
-
-Per portare questa installazione al livello del repository, i file da eseguire in ordine sono [017](../supabase/migrations/202611180017_archivio_documenti.sql), [018](../supabase/migrations/202611180018_cestino_rls.sql) e [019](../supabase/migrations/202611180019_cestino_documenti.sql). La 018 può essere ripetuta sul progetto in cui RLS è già attiva. Dopo l’aggiornamento eseguire di nuovo [verifica-schema.sql](../supabase/verifica-schema.sql).
+Il primo confronto del 21 novembre aveva individuato 44 differenze rispetto alla migrazione 019. La verifica successiva, eseguita in sola lettura sullo stesso progetto durante l’audit UX, ha restituito **OK** rispetto alla migrazione **202611180020**, con **449 controlli e zero differenze**. Per ripetere il controllo usare [verifica-schema.sql](../supabase/verifica-schema.sql). I risultati e le schermate dell’ultima revisione sono nel [rapporto UX](audit-ux/rapporto.md).
 
 ## Integrità e ripetibilità
 

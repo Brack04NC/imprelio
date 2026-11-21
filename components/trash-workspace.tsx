@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import { ChevronLeft, ChevronRight, Trash2, Undo2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -80,7 +81,7 @@ export function TrashWorkspace({ identity, initial, today }: { identity: Identit
         </select>
       </div>
     </header>
-    <div role="status">{notice && <p className={styles.notice}>{notice}</p>}</div>
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     {error && <p role="alert" className={`form-error ${styles.error}`}>{error}</p>}
     {!ready || storageError ? <p className={styles.empty} role={storageError ? 'alert' : 'status'}>
       {storageError ? 'Impossibile leggere il cestino in questo browser.' : 'Caricamento…'}

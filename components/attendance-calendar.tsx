@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -239,7 +240,7 @@ export function AttendanceCalendar({ identity, today: initialToday, month, perso
             <p>{registrationCount(selectedEntries.length)}</p></div>
           {availablePeople.length > 0 && <button type="button" className="button primary" disabled={Boolean(syncError)} onClick={() => openEditor()}><Plus size={17}/> Nuova registrazione</button>}
         </header>
-        <div role="status">{notice && <p className={styles.notice}>{notice}</p>}</div>
+        <StatusToast text={notice} onClose={() => setNotice('')}/>
         {selectedEntries.length ? <ul className={styles.entries}>{selectedEntries.map(entry => {
           const participant = peopleById.get(entry.person_id);
           const site = entry.site_id ? siteById.get(entry.site_id) : undefined;

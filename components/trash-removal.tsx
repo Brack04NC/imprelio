@@ -2,11 +2,11 @@
 
 import { Trash2, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import type { Identity } from '@/lib/domain';
 import { trashLabels, type TrashAction } from '@/lib/trash';
 import { persistTrash } from '@/lib/trash-client';
 import styles from './trash-removal.module.css';
+import { StatusToast, ToastCard, ToastRegion } from './feedback-toast';
 
 type RecordLabel = { id: string; label: string };
 type Removed = RecordLabel & { keyboard: boolean };
@@ -17,12 +17,14 @@ export function useTrashRemoval(identity: Identity, { kind, onChange }: {
 }) {
   const [target, setTarget] = useState<(RecordLabel & { detail?: string }) | null>(null);
   const [removed, setRemoved] = useState<Removed[]>([]);
+  const [restored, setRestored] = useState<RecordLabel | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const opener = useRef<HTMLElement | null>(null);
   const label = trashLabels[kind];
 
   function request(id: string, name: string, returnFocus?: HTMLElement | null, detail?: string) {
     opener.current = returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setRestored(null);
     setTarget({ id, label: name, detail });
   }
 
@@ -36,15 +38,20 @@ export function useTrashRemoval(identity: Identity, { kind, onChange }: {
     setRemoved(current => current.filter(item => item.id !== id));
   }, []);
 
-  const toasts = removed.length > 0 ? <section className={styles.notifications} aria-label="Eliminazioni recenti">
+  const toasts = removed.length > 0 ? <ToastRegion label="Eliminazioni recenti">
     {removed.map(item => <RemovalToast key={item.id} item={item} label={label.deleted} onDismiss={dismiss} onRestore={async () => {
       await persistTrash(identity, { action: 'restore', kind, id: item.id });
       dismiss(item.id);
-      setAnnouncement(label.restored + ' · ' + item.label);
+      setAnnouncement('');
+      setRestored(item);
       onChange('restore', item.id);
+      requestAnimationFrame(() => {
+        if (document.activeElement !== document.body) return;
+        const target = opener.current;
+        (target?.isConnected && target !== document.body ? target : document.getElementById('contenuto'))?.focus({ preventScroll: true });
+      });
     }}/>)}
-  </section> : null;
-  const host = toasts && typeof document !== 'undefined' ? document.getElementById('trash-notifications') : null;
+  </ToastRegion> : null;
 
   const feedback = <>
     <p className="sr-only" role="status">{announcement}</p>
@@ -56,7 +63,8 @@ export function useTrashRemoval(identity: Identity, { kind, onChange }: {
       setAnnouncement(label.deleted + ' · ' + target.label + '. Ripristina disponibile.');
       onChange('delete', target.id);
     }}/>}
-    {host ? createPortal(toasts, host) : toasts}
+    {toasts}
+    <StatusToast text={restored ? label.restored : undefined} detail={restored?.label} onClose={() => setRestored(null)}/>
   </>;
 
   return { request, feedback };
@@ -115,21 +123,12 @@ function RemovalToast({ item, label, onDismiss, onRestore }: {
 }) {
   const undo = useRef<HTMLButtonElement>(null);
   const restoring = useRef(false);
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const paused = hovered || focused || pending || Boolean(error);
 
   useEffect(() => {
     if (item.keyboard) undo.current?.focus();
   }, [item.keyboard]);
-
-  useEffect(() => {
-    if (paused) return;
-    const timer = window.setTimeout(() => onDismiss(item.id), 3000);
-    return () => window.clearTimeout(timer);
-  }, [paused, item.id, onDismiss]);
 
   async function restore() {
     if (restoring.current) return;
@@ -141,13 +140,9 @@ function RemovalToast({ item, label, onDismiss, onRestore }: {
     finally { restoring.current = false; setPending(false); }
   }
 
-  return <div className={styles.toast} onPointerEnter={event => { if (event.pointerType === 'mouse') setHovered(true); }}
-    onPointerLeave={() => setHovered(false)} onFocus={() => setFocused(true)}
-    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
-    <div><strong>{label}</strong><small>{item.label}</small></div>
-    <button ref={undo} type="button" className="button secondary" disabled={pending} onClick={() => void restore()}>
+  return <ToastCard tone="warning" text={label} detail={item.label} busy={pending} error={error}
+    duration={3000} onClose={() => onDismiss(item.id)} action={
+    <button ref={undo} type="button" className="button" disabled={pending} onClick={() => void restore()}>
       <Undo2 size={16} aria-hidden="true"/>{pending ? 'Ripristino…' : 'Ripristina'}
-    </button>
-    {error && <p role="alert" className="form-error">{error}</p>}
-  </div>;
+    </button>}/>;
 }

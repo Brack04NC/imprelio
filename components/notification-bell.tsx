@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Bell, X } from 'lucide-react';
+import { ArrowRight, Bell, BellOff, ChevronRight, CircleAlert, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { formatDate, type Identity } from '@/lib/domain';
 import { orgLink } from './shell';
 import { useNotificationFeed } from './use-notification-feed';
+import { notificationPriorities } from './notification-priority';
+import tones from './notice-tones.module.css';
 import styles from './notification-bell.module.css';
-
-const priorityLabels = { urgent: 'Urgente', soon: 'Da seguire', info: 'Informativa' } as const;
 
 export function NotificationBell({ identity }: { identity: Identity }) {
   const [open, setOpen] = useState(false);
@@ -38,6 +38,8 @@ export function NotificationBell({ identity }: { identity: Identity }) {
   }, [open]);
 
   const active = feed?.items ?? [];
+  const preview = active.slice(0, 6);
+  const partial = Boolean(feed?.unavailable.length);
   const href = orgLink('/notifiche?vista=cronologia', identity);
   return <>
     <button ref={trigger} type="button" className={`icon-button ${styles.trigger}`} aria-label="Notifiche" title="Notifiche"
@@ -60,26 +62,34 @@ export function NotificationBell({ identity }: { identity: Identity }) {
       }}>
       <div className={styles.content}>
         <header className={styles.header}>
-          <h2 id={id + '-title'}>Notifiche</h2>
-          <button ref={closeButton} type="button" className="icon-button" aria-label="Chiudi notifiche" onClick={() => close()}><X size={20}/></button>
+          <span className={styles.headerIcon}><Bell size={21} aria-hidden="true"/></span>
+          <div><h2 id={id + '-title'}>Notifiche</h2>
+            {!!active.length && <p>{preview.length < active.length ? `In evidenza · ${preview.length} di ${active.length} avvisi` :
+              active.length === 1 ? '1 avviso attivo' : `${active.length} avvisi attivi`}</p>}
+          </div>
+          <button ref={closeButton} type="button" className={`icon-button ${styles.close}`} aria-label="Chiudi notifiche" onClick={() => close()}><X size={20}/></button>
         </header>
         <div className={styles.scroll} aria-busy={loading}>
-          {error && <div className={styles.message}><p role="alert">{error}</p>
+          {error && <div className={`${styles.message} ${tones.danger}`}><CircleAlert size={18} aria-hidden="true"/><p role="alert">{error}</p>
             <button type="button" className="button secondary" onClick={() => void refresh()}>Riprova</button></div>}
           {!feed && !error && <p className={styles.message} role="status">Caricamento…</p>}
-          {!!feed?.unavailable.length && <p className={styles.message} role="status">Alcuni avvisi potrebbero mancare.</p>}
-          {feed && !active.length && <p className={styles.message}>Nessun avviso attivo.</p>}
+          {partial && <p className={`${styles.message} ${tones.warning}`} role="status"><CircleAlert size={18} aria-hidden="true"/>Alcuni avvisi potrebbero mancare.</p>}
+          {feed && !active.length && !error && !partial && <p className={styles.message}><BellOff size={18} aria-hidden="true"/>Nessun avviso attivo.</p>}
           {!!active.length && <ul className={styles.items} role="list">
-            {active.slice(0, 6).map(item => <li key={item.id} data-priority={item.priority}>
+            {preview.map(item => {
+              const { icon: Icon, tone, badge } = notificationPriorities[item.priority];
+              return <li key={item.id} className={tone} data-priority={item.priority}>
               <Link href={orgLink(item.href, identity)} prefetch={false} onClick={() => close(false)}>
-                <span className={styles.badge}>{priorityLabels[item.priority]}</span>
+                <span className={styles.badge}><Icon size={14} aria-hidden="true"/>{badge}</span>
                 <strong>{item.title}</strong>
                 {item.detail && <span className={styles.detail}>{item.detail}</span>}
                 <span className={styles.status}>{item.status}{item.date && <> · <time dateTime={item.date}>
                   {formatDate(item.date, { day: 'numeric', month: 'short', year: 'numeric' })}
                 </time></>}</span>
+                <ChevronRight size={17} className={styles.rowArrow} aria-hidden="true"/>
               </Link>
-            </li>)}
+            </li>;
+            })}
           </ul>}
         </div>
         <footer className={styles.footer}>

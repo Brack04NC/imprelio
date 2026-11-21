@@ -1,5 +1,6 @@
 'use client';
 
+import { StatusToast } from './feedback-toast';
 import { Mail, Plus, ShieldCheck, Users } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { requestWorkspace } from '@/lib/client-api';
@@ -52,7 +53,7 @@ export function AccessPage({ identity, initial, today }: { identity: Identity; i
 
   return <Shell identity={identity} section="accessi">
     <section className="page-header"><div><h1>Gestione accessi</h1><p>Invita i coordinatori e gestisci gli accessi all’azienda.</p></div><button ref={trigger} className="button primary" onClick={() => { setError(''); setInvite(true); }}><Plus size={19}/> Invita coordinatore</button></section>
-    {notice && <p role="status" className="access-notice">{notice}</p>}
+    <StatusToast text={notice} onClose={() => setNotice('')}/>
     {error && !invite && <p role="alert" className="form-error">{error}</p>}
     <section className="panel access-panel">
       <header className="panel-header"><div><h2>Utenti</h2><p>{access.members.length} profili</p></div><span className="agenda-heading-icon"><Users size={20}/></span></header>
